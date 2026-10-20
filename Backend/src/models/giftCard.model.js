@@ -1,0 +1,101 @@
+import mongoose from "mongoose";
+
+// A gift card is handed to a customer either by the repeat visit streak or by
+// the merchant during an event. It carries a discount or a free menu item and
+// is burned when it is used on an order.
+const giftCardSchema = new mongoose.Schema({
+    store:{
+        type:mongoose.Schema.Types.ObjectId,
+        ref:"Store",
+        required:true,
+        index:true
+    },
+    user:{
+        type:mongoose.Schema.Types.ObjectId,
+        ref:"User",
+        default:null,
+        index:true
+    },
+    customerPhone:{
+        type:String,
+        default:"",
+        trim:true,
+        index:true
+    },
+    code:{
+        type:String,
+        required:true,
+        unique:true,
+        index:true
+    },
+    title:{
+        type:String,
+        required:true,
+        trim:true,
+        maxLength:150
+    },
+    type:{
+        type:String,
+        enum:["DISCOUNT","FREE_ITEM"],
+        default:"DISCOUNT"
+    },
+    discountType:{
+        type:String,
+        enum:["PERCENTAGE","FIXED",null],
+        default:"PERCENTAGE"
+    },
+    value:{
+        type:Number,
+        default:0,
+        min:0
+    },
+    freeItemName:{
+        type:String,
+        default:""
+    },
+    minOrderValue:{
+        type:Number,
+        default:0,
+        min:0
+    },
+    source:{
+        type:String,
+        enum:["STREAK","EVENT","MERCHANT"],
+        default:"STREAK"
+    },
+    visitCount:{
+        type:Number,
+        default:0,
+        min:0
+    },
+    status:{
+        type:String,
+        enum:["ACTIVE","USED","EXPIRED","CANCELLED"],
+        default:"ACTIVE",
+        index:true
+    },
+    issuedAt:{
+        type:Date,
+        default:Date.now
+    },
+    expiresAt:{
+        type:Date,
+        required:true
+    },
+    usedAt:{
+        type:Date,
+        default:null
+    },
+    usedOrder:{
+        type:mongoose.Schema.Types.ObjectId,
+        ref:"Order",
+        default:null
+    }
+},{
+    timestamps:true
+});
+
+giftCardSchema.index({user:1,store:1,status:1});
+giftCardSchema.index({customerPhone:1,store:1,status:1});
+
+export default mongoose.model("GiftCard",giftCardSchema);

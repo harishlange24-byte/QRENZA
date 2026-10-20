@@ -1,0 +1,247 @@
+import jwt from "jsonwebtoken";
+
+import OtpSession from "../models/otpSession.model.js";
+import User from "../models/user.model.js";
+import { generateOpt, generateOtpExpiry, hashOtp, verifyOtpHash } from "../utils/otp.js";
+import { sendTextBeeSms } from "../utils/sendSms.js";
+
+const OTP_TTL_MINUTES = 5;
+const OTP_COOLDOWN_MS = 5 * 1000;
+const OTP_WINDOW_MINUTES = 15;
+const OTP_MAX_PER_WINDOW = 5;
+
+const sendOtp = async (req, res) => {
+    try {
+        const phone = req.body.phone;
+
+        if (!phone || typeof phone !== "string") {
+            return res.status(400).json({
+                success: false,
+                message: "Phone number is required"
+            });
+        }
+
+        const latestSession = await OtpSession.findOne({
+            phone,
+            purpose: "LOGIN"
+        }).sort({ createdAt: -1 });
+
+        if (latestSession) {
+            const elapsedMs = Date.now() - latestSession.createdAt.getTime();
+
+            if (elapsedMs < OTP_COOLDOWN_MS) {
+                const retryAfterSecond = Math.ceil((OTP_COOLDOWN_MS - elapsedMs) / 1000);
+
+                return res.status(429).json({
+                    success: false,
+                    message: `Wait for ${retryAfterSecond} before requesting another OTP.`,
+                    retryAfterSecond
+                });
+            }
+        }
+
+        const windowStart = new Date(Date.now() - OTP_WINDOW_MINUTES * 60 * 1000);
+
+        const recentRequests = await OtpSession.countDocuments({
+            phone,
+            purpose: "LOGIN",
+            createdAt: { $gte: windowStart }
+        });
+
+        if (recentRequests >= OTP_MAX_PER_WINDOW) {
+            return res.status(429).json({
+                success: false,
+                message: "Too many OTP requests. Please try again later.",
+                retryAfterSecond: OTP_WINDOW_MINUTES * 60
+            });
+        }
+
+        const otp = generateOpt();
+
+        const otpSession = await OtpSession.create({
+            phone,
+            otpHash: hashOtp(otp),
+            purpose: "LOGIN",
+            expiresAt: generateOtpExpiry(OTP_TTL_MINUTES)
+        });
+
+        try {
+            await sendTextBeeSms(phone, `Your Qrenza OTP is ${otp}. Valid for 5 minutes. Do not share it.`);
+        } catch (error) {
+            console.error("SMS sending failed :", error.message);
+
+            // The code was never delivered, so drop the session and let the
+            // caller retry instead of leaving a dead OTP behind.
+            await OtpSession.findByIdAndDelete(otpSession._id);
+
+            return res.status(502).json({
+                success: false,
+                message: "Unable to send OTP SMS. Please try again."
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "OTP sent successfully"
+        });
+    } catch (error) {
+        console.error("sendOtp error : ", error.message);
+
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong"
+        });
+    }
+};
+
+const verifyOtp = async (req, res) => {
+    try {
+        const { phone, otp } = req.body;
+
+        if (typeof phone !== "string" || typeof otp !== "string" || !/^\d{6}$/.test(otp)) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid phone and 6-digit OTP required"
+            });
+        }
+
+        const session = await OtpSession.findOne({
+            phone,
+            purpose: "LOGIN",
+            consumedAt: null
+        }).sort({ createdAt: -1 }).select("+otpHash");
+
+        if (!session) {
+            return res.status(400).json({
+                success: false,
+                message: "OTP session not found"
+            });
+        }
+
+        if (session.expiresAt <= new Date()) {
+            return res.status(400).json({
+                success: false,
+                message: "OTP has expired"
+            });
+        }
+
+        if (session.attempts >= session.maxAttempts) {
+            return res.status(429).json({
+                success: false,
+                message: "Too many attempts. Request a new OTP."
+            });
+        }
+
+        if (!verifyOtpHash(otp, session.otpHash)) {
+            session.attempts += 1;
+
+            if (session.attempts >= session.maxAttempts) {
+                session.consumedAt = new Date();
+            }
+
+            await session.save();
+
+            return res.status(400).json({
+                success: false,
+                message: "Incorrect OTP"
+            });
+        }
+
+        const now = new Date();
+
+        // Guarded update so two parallel verifies cannot both burn the session.
+        const consumedSession = await OtpSession.findOneAndUpdate(
+            {
+                _id: session._id,
+                consumedAt: null,
+                expiresAt: { $gt: now },
+                attempts: { $lt: session.maxAttempts }
+            },
+            {
+                $set: {
+                    verifiedAt: now,
+                    consumedAt: now
+                }
+            },
+            { new: true }
+        );
+
+        if (!consumedSession) {
+            return res.status(400).json({
+                success: false,
+                message: "OTP expired or already used"
+            });
+        }
+
+        let user = await User.findOne({ phone });
+
+        if (!user) {
+            user = await User.create({
+                phone,
+                role: "CUSTOMER",
+                isPhoneVerified: true,
+                lastLoginAt: now
+            });
+        } else {
+            if (!user.isActive) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Account is inactive"
+                });
+            }
+
+            user.isPhoneVerified = true;
+            user.lastLoginAt = now;
+
+            await user.save();
+        }
+
+        if (!process.env.JWT_SECRET) {
+            throw new Error("JWT_SECRET is missing from .env");
+        }
+
+        const token = jwt.sign(
+            { sub: user._id.toString() },
+            process.env.JWT_SECRET,
+            { expiresIn: "7d" }
+        );
+
+        res.cookie("token", token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+            path: "/"
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Login successful",
+            user: {
+                id: user._id,
+                phone: user.phone,
+                role: user.role
+            }
+        });
+    } catch (error) {
+        console.error("verifyOtp error : ", error.message);
+
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong"
+        });
+    }
+};
+
+const getMe = async (req, res) => {
+    return res.status(200).json({
+        success: true,
+        user: {
+            id: req.user._id,
+            phone: req.user.phone,
+            role: req.user.role
+        }
+    });
+};
+
+export { sendOtp, verifyOtp, getMe };

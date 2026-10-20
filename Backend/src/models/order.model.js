@@ -1,0 +1,143 @@
+import mongoose from "mongoose";
+
+const orderItemSchema = new mongoose.Schema({
+    item:{
+        type:mongoose.Schema.Types.ObjectId,
+        ref:"MenuItem",
+        default:null
+    },
+    name:{
+        type:String,
+        required:true,
+        trim:true,
+        maxLength:100
+    },
+    price:{
+        type:Number,
+        required:true,
+        min:0
+    },
+    quantity:{
+        type:Number,
+        required:true,
+        min:1,
+        default:1
+    },
+    isFree:{
+        type:Boolean,
+        default:false
+    }
+},{
+    _id:false
+});
+
+// A customer order placed from the public menu. Prices are always recomputed on
+// the server from the menu, the cart sent by the browser is only a wish list.
+const orderSchema = new mongoose.Schema({
+    store:{
+        type:mongoose.Schema.Types.ObjectId,
+        ref:"Store",
+        required:true,
+        index:true
+    },
+    user:{
+        type:mongoose.Schema.Types.ObjectId,
+        ref:"User",
+        default:null,
+        index:true
+    },
+    customerName:{
+        type:String,
+        required:true,
+        trim:true
+    },
+    customerPhone:{
+        type:String,
+        required:true,
+        trim:true,
+        index:true
+    },
+    tableNumber:{
+        type:String,
+        default:""
+    },
+    items:{
+        type:[orderItemSchema],
+        validate:{
+            validator:(value)=>Array.isArray(value) && value.length > 0,
+            message:"Order needs at least one item"
+        }
+    },
+    subtotal:{
+        type:Number,
+        required:true,
+        min:0
+    },
+    discount:{
+        type:Number,
+        default:0,
+        min:0
+    },
+    total:{
+        type:Number,
+        required:true,
+        min:0
+    },
+    giftCard:{
+        type:mongoose.Schema.Types.ObjectId,
+        ref:"GiftCard",
+        default:null
+    },
+    giftCardCode:{
+        type:String,
+        default:""
+    },
+    note:{
+        type:String,
+        default:"",
+        maxLength:300
+    },
+    status:{
+        type:String,
+        enum:["PLACED","ACCEPTED","PREPARING","READY","SERVED","CANCELLED"],
+        default:"PLACED",
+        index:true
+    },
+    preparationMinutes:{
+        type:Number,
+        default:10,
+        min:1
+    },
+    estimatedReadyAt:{
+        type:Date,
+        required:true
+    },
+    acceptedAt:{
+        type:Date,
+        default:null
+    },
+    readyAt:{
+        type:Date,
+        default:null
+    },
+    servedAt:{
+        type:Date,
+        default:null
+    },
+    cancelledAt:{
+        type:Date,
+        default:null
+    },
+    cancelReason:{
+        type:String,
+        default:""
+    }
+},{
+    timestamps:true
+});
+
+// The merchant desk reads by store + status, the customer reads their own list.
+orderSchema.index({store:1,status:1,createdAt:-1});
+orderSchema.index({user:1,store:1,createdAt:-1});
+
+export default mongoose.model("Order",orderSchema);
