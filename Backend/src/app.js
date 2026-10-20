@@ -23,11 +23,13 @@ app.use(helmet());
 
 // The Vite dev server runs on http, so the scheme matters here. CORS_ORIGINS
 // is a space separated list so deployed frontends can be added on.
-const allowedOrigins = ("https://qrenza.vercel.app/" || "http://localhost:5173 http://127.0.0.1:5173").split(" ");
+const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173 http://127.0.0.1:5173").split(" ");
 
 app.use(cors({
     origin:allowedOrigins,
-    credentials:true
+    credentials:true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
 }))
 
 // Keep the raw body so payment provider webhooks can be signature verified.
