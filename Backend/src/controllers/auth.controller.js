@@ -10,6 +10,22 @@ const OTP_COOLDOWN_MS = 5 * 1000;
 const OTP_WINDOW_MINUTES = 15;
 const OTP_MAX_PER_WINDOW = 5;
 
+// The app and the API normally sit on different hosts, so the session cookie has
+// to travel cross-site. Browsers only allow that with SameSite=None, and None is
+// ignored unless the cookie is marked Secure. Both are read off the connection
+// itself, so plain http dev keeps Lax instead of having its cookie thrown away.
+const sessionCookie = (req) => {
+    const forwarded = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+    const https = req.secure || forwarded === "https";
+
+    return {
+        httpOnly: true,
+        secure: https,
+        sameSite: https ? "none" : "lax",
+        path: "/"
+    };
+};
+
 const sendOtp = async (req, res) => {
     try {
         const phone = req.body.phone;
@@ -207,11 +223,8 @@ const verifyOtp = async (req, res) => {
         );
 
         res.cookie("token", token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-            path: "/"
+            ...sessionCookie(req),
+            maxAge: 7 * 24 * 60 * 60 * 1000
         });
 
         return res.status(200).json({
@@ -244,4 +257,15 @@ const getMe = async (req, res) => {
     });
 };
 
-export { sendOtp, verifyOtp, getMe };
+const logout = async (req, res) => {
+    // Clearing only works when the attributes match the ones the cookie was set
+    // with, so the same options are derived again here.
+    res.clearCookie("token", sessionCookie(req));
+
+    return res.status(200).json({
+        success: true,
+        message: "Logged out"
+    });
+};
+
+export { sendOtp, verifyOtp, getMe, logout };

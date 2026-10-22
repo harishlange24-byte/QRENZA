@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useDispatch } from "react-redux";
-import { useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { Navigate, useNavigate } from "react-router-dom";
 import { onboardMerchant } from "../../api/merchant";
 import { getErrorMessage } from "../../api/client";
 import { merchantSchema } from "../../lib/schemas";
@@ -14,6 +14,14 @@ import SiteHeader from "../../components/SiteHeader";
 const types = ["CAFE", "RESTAURANT", "BAKERY", "GROCERY", "PHARMACY", "CLOTHING", "ELECTRONICS", "SALON", "RETAIL", "OTHER"];
 
 export default function OnboardPage() {
+  const user = useSelector((s) => s.auth.user);
+
+  // Someone who already runs a shop belongs on the desk, not on the signup form.
+  // The API would only answer 409 here anyway.
+  if (user?.role === "MERCHANT" || user?.role === "STAFF" || user?.role === "SUPER_ADMIN") {
+    return <Navigate to="/merchant" replace />;
+  }
+
   return (
     <AuthGate>
       <div className="min-h-screen bg-paper">

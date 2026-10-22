@@ -11,3 +11,7 @@ export function verifyOtp(phone, otp) {
 export function getMe() {
   return client.get("/auth/me");
 }
+
+export function logout() {
+  return client.post("/auth/logout");
+}

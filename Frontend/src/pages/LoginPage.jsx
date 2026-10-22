@@ -8,6 +8,27 @@ import { confirmOtp, requestOtp } from "../store/authSlice";
 import SiteHeader from "../components/SiteHeader";
 import { Alert, Button, Card, Field, inputClass, PageTitle } from "../components/ui";
 
+// Where a signed-in visitor belongs.
+//
+// The page someone was bounced from is only honoured when their role is actually
+// allowed on it. That is what used to break: a shop owner who tapped "For shops"
+// as a guest got sent back to the onboarding form after logging in, even though
+// they already had a merchant account.
+function landingFor(from, role, admin) {
+  const deepLink = from && from !== "/merchant/onboard" ? from : "";
+
+  if (role === "SUPER_ADMIN") {
+    return deepLink || (admin ? "/admin" : "/merchant");
+  }
+
+  if (role === "MERCHANT" || role === "STAFF") {
+    return deepLink.startsWith("/merchant") ? deepLink : "/merchant";
+  }
+
+  const guestArea = deepLink && !deepLink.startsWith("/merchant") && !deepLink.startsWith("/admin");
+  return guestArea ? deepLink : "/";
+}
+
 export default function LoginPage({ admin = false }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -19,12 +40,8 @@ export default function LoginPage({ admin = false }) {
 
   useEffect(() => {
     if (!user) return;
-    if (admin) {
-      if (user.role === "SUPER_ADMIN") navigate(location.state?.from || "/admin", { replace: true });
-      return;
-    }
-    const to = location.state?.from || (user.role === "MERCHANT" || user.role === "SUPER_ADMIN" ? "/merchant" : "/");
-    navigate(to, { replace: true });
+    if (admin && user.role !== "SUPER_ADMIN") return;
+    navigate(landingFor(location.state?.from, user.role, admin), { replace: true });
   }, [user, location.state, navigate, admin]);
 
   const phoneForm = useForm({ resolver: zodResolver(phoneSchema), defaultValues: { phone: "" } });
@@ -35,15 +52,9 @@ export default function LoginPage({ admin = false }) {
   }
 
   async function onOtp(values) {
-    const result = await dispatch(confirmOtp({ phone, otp: values.otp }));
-    if (confirmOtp.fulfilled.match(result)) {
-      const role = result.payload.role;
-      if (admin) {
-        if (role === "SUPER_ADMIN") navigate(location.state?.from || "/admin");
-        return;
-      }
-      navigate(location.state?.from || (role === "MERCHANT" ? "/merchant" : "/"));
-    }
+    // Redirect is left to the effect above so a fresh login and a page reload
+    // resolve the destination through the exact same role check.
+    await dispatch(confirmOtp({ phone, otp: values.otp }));
   }
 
   return (

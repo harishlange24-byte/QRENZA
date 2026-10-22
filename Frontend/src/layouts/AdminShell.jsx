@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { logoutLocal } from "../store/authSlice";
+import { endSession } from "../store/authSlice";
 
 const links = [
   ["/admin", "Overview"],
@@ -34,7 +34,7 @@ export default function AdminShell() {
           ))}
         </nav>
         <NavLink to="/merchant" className="mt-4 block text-xs text-purple">Merchant desk</NavLink>
-        <button className="mt-4 block text-xs text-muted" onClick={() => { dispatch(logoutLocal()); navigate("/"); }}>Sign out</button>
+        <button className="mt-4 block text-xs text-muted" onClick={() => { dispatch(endSession()); navigate("/"); }}>Sign out</button>
       </aside>
       <main className="p-4 md:p-8">
         <Outlet />

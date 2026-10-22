@@ -21,24 +21,20 @@ const app = express();
 
 app.use(helmet());
 
-// // The Vite dev server runs on http, so the scheme matters here. CORS_ORIGINS
-// // is a space separated list so deployed frontends can be added on.
-// const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173 http://127.0.0.1:5173").split(" ");
+// The Vite dev server runs on http, so the scheme matters here. CORS_ORIGINS is
+// a space separated list so the LAN phone, localhost and the deployed frontend
+// can all sit side by side. credentials has to stay true, otherwise the browser
+// refuses to send the session cookie on any authenticated call.
+const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173 http://127.0.0.1:5173")
+    .split(/\s+/)
+    .filter(Boolean);
 
-// app.use(cors({
-//     origin:allowedOrigins,
-//     credentials:true,
-//     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-//     allowedHeaders: ["Content-Type", "Authorization"],
-// }))
-app.use(
-  cors({
-    origin: "https://qrenza.vercel.app",
+app.use(cors({
+    origin: allowedOrigins,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+    allowedHeaders: ["Content-Type", "Authorization"]
+}))
 
 // Keep the raw body so payment provider webhooks can be signature verified.
 app.use(express.json({

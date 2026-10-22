@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { AccessProvider, useAccess } from "../context/AccessContext";
 import { MerchantStoreProvider, useMerchantStore } from "../context/MerchantStoreContext";
 import { Alert, inputClass } from "../components/ui";
-import { logoutLocal } from "../store/authSlice";
+import { endSession } from "../store/authSlice";
 
 // The last column is the plan feature that unlocks the screen. It is the same
 // code the backend checks, so the badge can never disagree with the API.
@@ -83,7 +83,7 @@ function ShellInner() {
         {user?.role === "SUPER_ADMIN" ? (
           <Link to="/admin" className="mt-4 block text-xs text-purple">Super admin</Link>
         ) : null}
-        <button className="mt-4 block text-xs text-muted" onClick={() => { dispatch(logoutLocal()); navigate("/"); }}>Sign out</button>
+        <button className="mt-4 block text-xs text-muted" onClick={() => { dispatch(endSession()); navigate("/"); }}>Sign out</button>
       </aside>
       <main className="space-y-4 p-4 md:p-8">
         {planLocked ? (
