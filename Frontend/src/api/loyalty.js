@@ -33,6 +33,10 @@ export function createReward(storeId, payload) {
   return client.post(`/store/${storeId}/rewards`, payload);
 }
 
+export function deleteReward(storeId, rewardId) {
+  return client.delete(`/store/${storeId}/rewards/${rewardId}`);
+}
+
 export function redeemClaim(storeId, code) {
   return client.post(`/store/${storeId}/rewards/redeem`, { code });
 }

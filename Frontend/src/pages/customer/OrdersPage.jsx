@@ -41,7 +41,7 @@ export default function OrdersPage() {
   async function load() {
     try {
       const { data } = await getMyOrders(code, phone);
-      setOrders(data.orders || []);
+      setOrders(data.data?.orders || []);
     } catch (e) {
       setError(getErrorMessage(e));
     }

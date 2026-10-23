@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import mongoose from "mongoose";
 import User from "../models/user.model.js";
 import LoyaltyProgram from "../models/loyaltyProgram.model.js";
 import LoyaltyCard from "../models/loyaltyCard.model.js";
@@ -29,6 +30,7 @@ const cardView = (card,program)=>{
     const programView = program ? {
         name : program.name,
         stampsRequired : program.stampsRequired,
+        rewardText : program.rewardText || "",
         stampRule : program.stampRule
     } : null;
 
@@ -96,6 +98,7 @@ const getMyLoyalty = async (req,res)=>{
                 program : {
                     name : program.name,
                     stampsRequired : program.stampsRequired,
+                    rewardText : program.rewardText || "",
                     stampRule : program.stampRule
                 },
                 card : cardView(card,program)
@@ -108,6 +111,102 @@ const getMyLoyalty = async (req,res)=>{
             message:"Unable to fetch loyalty card"
         })
     }
+}
+
+// One stamp for one customer, shared by the counter desk and the scan flow.
+// Returns null when the shop has no live program, otherwise the updated card
+// plus the reward claim when the card happened to fill up.
+const stampCustomer = async (store, customer, options = {})=>{
+    const program = await LoyaltyProgram.findOne({
+        store : store._id,
+        isActive : true
+    })
+
+    if(!program){
+        return null;
+    }
+
+    let card = await LoyaltyCard.findOne({
+        user : customer._id,
+        store : store._id
+    })
+
+    if(!card){
+        card = await LoyaltyCard.create({
+            user : customer._id,
+            store : store._id,
+            program : program._id
+        })
+    }
+
+    card.stamps += 1;
+    card.totalStampsEarned += 1;
+
+    let rewardEarned = false;
+
+    // Filling the card resets the counter and unlocks one reward.
+    if(card.stamps >= program.stampsRequired){
+        card.stamps = 0;
+        card.totalRewardsEarned += 1;
+        rewardEarned = true;
+    }
+
+    await card.save();
+
+    await LoyaltyTransaction.create({
+        user : customer._id,
+        store : store._id,
+        type : "STAMP",
+        delta : 1,
+        balanceAfter : card.stamps,
+        performendBy : options.performedBy || null,
+        referenceType : options.referenceType || "PURCHASE",
+        note : options.note ? String(options.note) : ""
+    })
+
+    let claim = null;
+
+    if(rewardEarned){
+        // The reward the merchant typed on the loyalty screen wins. Anything
+        // else the shop runs is only a fallback so the card never pays nothing.
+        const reward =
+            await Reward.findOne({
+                store : store._id,
+                program : program._id,
+                isActive : true
+            }).sort({createdAt : 1}) ||
+            await Reward.findOne({
+                store : store._id,
+                isActive : true
+            }).sort({createdAt : 1});
+
+        const hasCapacity = reward &&
+            (reward.maxClaims === null ||
+             reward.maxClaims === undefined ||
+             reward.claimedCount < reward.maxClaims);
+
+        // No reward configured or it is fully claimed: skip silently.
+        if(hasCapacity){
+            const expiresAt = new Date(
+                Date.now() + (reward.validityDays || 30) * DAY_MS
+            );
+
+            claim = await RewardClaim.create({
+                user : customer._id,
+                store : store._id,
+                reward : reward._id,
+                source : "LOYALTY_MILESTONE",
+                code : await makeUniqueClaimCode(),
+                expiresAt
+            })
+
+            reward.claimedCount += 1;
+
+            await reward.save();
+        }
+    }
+
+    return {card, program, rewardEarned, claim};
 }
 
 const addStamp = async (req,res)=>{
@@ -148,100 +247,29 @@ const addStamp = async (req,res)=>{
             })
         }
 
-        const program = await LoyaltyProgram.findOne({
-            store : store._id,
-            isActive : true
+        const result = await stampCustomer(store, customer, {
+            performedBy : req.user._id,
+            note,
+            referenceType : "PURCHASE"
         })
 
-        if(!program){
+        if(!result){
             return res.status(404).json({
                 success:false,
                 message:"No active loyalty program for this store"
             })
         }
 
-        let card = await LoyaltyCard.findOne({
-            user : customer._id,
-            store : store._id
-        })
-
-        if(!card){
-            card = await LoyaltyCard.create({
-                user : customer._id,
-                store : store._id,
-                program : program._id
-            })
-        }
-
-        card.stamps += 1;
-        card.totalStampsEarned += 1;
-
-        let rewardEarned = false;
-
-        // Filling the card resets the counter and unlocks one reward.
-        if(card.stamps >= program.stampsRequired){
-            card.stamps = 0;
-            card.totalRewardsEarned += 1;
-            rewardEarned = true;
-        }
-
-        await card.save();
-
-        await LoyaltyTransaction.create({
-            user : customer._id,
-            store : store._id,
-            type : "STAMP",
-            delta : 1,
-            balanceAfter : card.stamps,
-            performendBy : req.user._id,
-            referenceType : "PURCHASE",
-            note : note ? String(note) : ""
-        })
-
-        let claim = null;
-
-        if(rewardEarned){
-            const reward = await Reward.findOne({
-                store : store._id,
-                isActive : true
-            }).sort({createdAt : 1});
-
-            const hasCapacity = reward &&
-                (reward.maxClaims === null ||
-                 reward.maxClaims === undefined ||
-                 reward.claimedCount < reward.maxClaims);
-
-            // No reward configured or it is fully claimed: skip silently.
-            if(hasCapacity){
-                const expiresAt = new Date(
-                    Date.now() + (reward.validityDays || 30) * DAY_MS
-                );
-
-                claim = await RewardClaim.create({
-                    user : customer._id,
-                    store : store._id,
-                    reward : reward._id,
-                    source : "LOYALTY_MILESTONE",
-                    code : await makeUniqueClaimCode(),
-                    expiresAt
-                })
-
-                reward.claimedCount += 1;
-
-                await reward.save();
-            }
-        }
-
         return res.status(200).json({
             success:true,
-            message : claim ? "Stamp added, reward earned!" : "Stamp added",
+            message : result.claim ? "Stamp added, reward earned!" : "Stamp added",
             data : {
-                card : cardView(card, program),
-                rewardEarned,
-                claim : claim ? {
-                    code : claim.code,
-                    status : claim.status,
-                    expiresAt : claim.expiresAt
+                card : cardView(result.card, result.program),
+                rewardEarned : result.rewardEarned,
+                claim : result.claim ? {
+                    code : result.claim.code,
+                    status : result.claim.status,
+                    expiresAt : result.claim.expiresAt
                 } : null
             }
         })
@@ -292,14 +320,7 @@ const getLoyaltyProgram = async (req,res)=>{
 
 const upsertLoyaltyProgram = async (req,res)=>{
     try{
-        const {name, stampsRequired, stampRule, isActive} = req.body;
-
-        if(!name?.toString().trim()){
-            return res.status(400).json({
-                success:false,
-                message:"Program name is required"
-            })
-        }
+        const {name, rewardText, stampsRequired, stampRule, isActive} = req.body;
 
         const required = Number(stampsRequired);
 
@@ -309,6 +330,10 @@ const upsertLoyaltyProgram = async (req,res)=>{
                 message:"stampsRequired must be an integer of at least 1"
             })
         }
+
+        // The desk only thinks in "10 stamps for a reward", so a name is not
+        // demanded from them, a sensible one is built instead.
+        const programName = name?.toString().trim() || `${required} stamps deal`;
 
         const rule = stampRule || "ONE_PER_PURCHASE";
 
@@ -341,7 +366,8 @@ const upsertLoyaltyProgram = async (req,res)=>{
             {store : store._id},
             {
                 $set : {
-                    name : name.trim(),
+                    name : programName,
+                    rewardText : rewardText?.toString().trim() || "",
                     stampsRequired : required,
                     stampRule : rule,
                     isActive : isActive === undefined ? true : Boolean(isActive)
@@ -349,6 +375,30 @@ const upsertLoyaltyProgram = async (req,res)=>{
             },
             {new : true, upsert : true, setDefaultsOnInsert : true}
         )
+
+        // The reward text is the actual prize, so it is mirrored into a reward
+        // row. Without it a filled card would reset and pay out nothing.
+        const rewardLabel = rewardText?.toString().trim();
+
+        if(rewardLabel){
+            await Reward.findOneAndUpdate(
+                {store : store._id, name : `Loyalty: ${rewardLabel}`},
+                {
+                    $set : {
+                        program : program._id,
+                        description : `Unlocked after ${required} stamps`,
+                        type : "CUSTOM",
+                        discountType : null,
+                        value : 0,
+                        probability : 0,
+                        maxClaims : null,
+                        validityDays : 30,
+                        isActive : true
+                    }
+                },
+                {upsert : true, returnDocument : "after", setDefaultsOnInsert : true}
+            )
+        }
 
         return res.status(200).json({
             success:true,
@@ -773,4 +823,52 @@ const redeemClaim = async (req,res)=>{
     }
 }
 
-export {getMyLoyalty, addStamp, getLoyaltyProgram, upsertLoyaltyProgram, scratchReward, getMyRewards, listRewards, createReward, redeemClaim};
+// Reward removal. Claims already won by customers are left alone so their
+// history stays readable.
+const deleteReward = async(req,res)=>{
+    try{
+        const {rewardId} = req.params;
+
+        if(!mongoose.isValidObjectId(rewardId)){
+            return res.status(400).json({
+                success:false,
+                message:"Invalid reward id"
+            })
+        }
+
+        const merchant = await resolveMerchant(req.user);
+        const store = await findOwnedStore(merchant, req.params.storeId);
+
+        if(!store){
+            return res.status(404).json({
+                success:false,
+                message:"Store not found"
+            })
+        }
+
+        const reward = await Reward.findOneAndDelete({
+            _id : rewardId,
+            store : store._id
+        });
+
+        if(!reward){
+            return res.status(404).json({
+                success:false,
+                message:"Reward not found"
+            })
+        }
+
+        return res.status(200).json({
+            success:true,
+            message:"Reward deleted successfully"
+        })
+    }catch(error){
+        console.error("deleteReward error : ",error);
+        return res.status(500).json({
+            success:false,
+            message:"Unable to delete reward"
+        })
+    }
+}
+
+export {getMyLoyalty, addStamp, stampCustomer, getLoyaltyProgram, upsertLoyaltyProgram, scratchReward, getMyRewards, listRewards, createReward, deleteReward, redeemClaim};

@@ -1,4 +1,11 @@
 import mongoose from "mongoose";
+import storeModel from "../models/store.model.js";
+import menuItemModel from "../models/menuItem.model.js";
+import orderModel from "../models/order.model.js";
+import issueModel from "../models/issue.model.js";
+import queueEntryModel from "../models/queueEntry.model.js";
+import rewardModel from "../models/reward.model.js";
+import giftCardModel from "../models/giftCard.model.js";
 import loyaltyCardModel from "../models/loyaltyCard.model.js";
 import loyaltyTransactionModel from "../models/loyaltyTransaction.model.js";
 import rewardClaimModel from "../models/rewardClaim.model.js";
@@ -297,6 +304,138 @@ const getAnalytics = async(req,res)=>{
     }
 }
 
+// One call that fills the merchant home screen. Every number the desk wants to
+// glance at is counted in parallel so the page stays quick.
+const getDashboardSummary = async(req,res)=>{
+    try{
+        const merchant = await resolveMerchant(req.user);
+        const store = await findOwnedStore(merchant, req.params.storeId);
+
+        if(!store){
+            return res.status(404).json({
+                success:false,
+                message:"Store not found"
+            })
+        }
+
+        const startOfToday = new Date();
+        startOfToday.setHours(0,0,0,0);
+
+        const trendStart = new Date(startOfToday);
+        trendStart.setDate(trendStart.getDate() - 6);
+
+        const [
+            storeCount,
+            menuItemCount,
+            ordersToday,
+            ordersTotal,
+            customers,
+            newCustomers,
+            feedbackCount,
+            ratingTotals,
+            openIssues,
+            queueWaiting,
+            rewards,
+            activeClaims,
+            giftCards,
+            stampTotals,
+            orderTotals,
+            visitRows,
+            orderRows
+        ] = await Promise.all([
+            storeModel.countDocuments({merchant:merchant._id}),
+            menuItemModel.countDocuments({store:store._id}),
+            orderModel.countDocuments({store:store._id, createdAt:{$gte:startOfToday}}),
+            orderModel.countDocuments({store:store._id}),
+            loyaltyCardModel.countDocuments({store:store._id}),
+            loyaltyCardModel.countDocuments({store:store._id, createdAt:{$gte:startOfToday}}),
+            feedbackModel.countDocuments({store:store._id}),
+            feedbackModel.aggregate([
+                {$match:{store:store._id}},
+                {$group:{_id:null, averageRating:{$avg:"$rating"}}}
+            ]),
+            issueModel.countDocuments({store:store._id, status:{$in:["OPEN","IN_PROGRESS"]}}),
+            queueEntryModel.countDocuments({store:store._id, status:{$in:["WAITING","CALLED"]}}),
+            rewardModel.countDocuments({store:store._id, isActive:true}),
+            rewardClaimModel.countDocuments({store:store._id, status:"ACTIVE"}),
+            giftCardModel.countDocuments({store:store._id, status:"ACTIVE"}),
+            loyaltyCardModel.aggregate([
+                {$match:{store:store._id}},
+                {$group:{_id:null, stamps:{$sum:"$totalStampsEarned"}}}
+            ]),
+            orderModel.aggregate([
+                {$match:{store:store._id, status:{$ne:"CANCELLED"}}},
+                {$group:{_id:null, revenue:{$sum:"$total"}, billed:{$sum:1}}}
+            ]),
+            analyticEventModel.aggregate([
+                {$match:{store:store._id, occurredAt:{$gte:trendStart}}},
+                {$group:{_id:{$dateToString:{format:"%Y-%m-%d", date:"$occurredAt"}}, visits:{$sum:1}}}
+            ]),
+            orderModel.aggregate([
+                {$match:{store:store._id, createdAt:{$gte:trendStart}}},
+                {$group:{_id:{$dateToString:{format:"%Y-%m-%d", date:"$createdAt"}}, orders:{$sum:1}}}
+            ])
+        ])
+
+        const visitByDate = new Map(visitRows.map((row)=>[row._id, row.visits]));
+        const orderByDate = new Map(orderRows.map((row)=>[row._id, row.orders]));
+
+        // A zero filled week keeps the chart readable on quiet days.
+        const trend = [];
+
+        for(let i = 0; i < 7; i++){
+            const day = new Date(trendStart);
+            day.setDate(trendStart.getDate() + i);
+
+            const date = day.toISOString().slice(0, 10);
+
+            trend.push({
+                date:date.slice(5),
+                visits:visitByDate.get(date) || 0,
+                orders:orderByDate.get(date) || 0
+            })
+        }
+
+        const rating = ratingTotals.length ? Number(ratingTotals[0].averageRating.toFixed(1)) : 0;
+        const stamps = stampTotals.length ? stampTotals[0].stamps : 0;
+        const billed = orderTotals.length ? orderTotals[0].billed : 0;
+        const revenue = orderTotals.length ? orderTotals[0].revenue : 0;
+
+        return res.status(200).json({
+            success:true,
+            message:"Dashboard summary fetched successfully",
+            data:{
+                summary:{
+                    storeName:store.name,
+                    stores:storeCount,
+                    menuItems:menuItemCount,
+                    ordersToday,
+                    ordersTotal,
+                    ordersBilled:billed,
+                    revenue,
+                    customers,
+                    newCustomers,
+                    feedback:feedbackCount,
+                    feedbackScore:rating,
+                    openIssues,
+                    queueWaiting,
+                    rewards,
+                    activeClaims,
+                    giftCards,
+                    stamps
+                },
+                trend
+            }
+        })
+    }catch(error){
+        console.error("getDashboardSummary error : ",error);
+        return res.status(500).json({
+            success:false,
+            message:"Unable to fetch dashboard summary"
+        })
+    }
+}
+
 const listCampaigns = async(req,res)=>{
     try{
         const merchant = await resolveMerchant(req.user);
@@ -398,4 +537,4 @@ const createCampaign = async(req,res)=>{
     }
 }
 
-export {getCrmStats, getCrmCustomers, getCustomerProfile, getAnalytics, listCampaigns, createCampaign};
+export {getCrmStats, getCrmCustomers, getCustomerProfile, getAnalytics, getDashboardSummary, listCampaigns, createCampaign};

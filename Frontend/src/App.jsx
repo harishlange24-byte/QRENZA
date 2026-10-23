@@ -8,6 +8,7 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import PricingPage from "./pages/PricingPage";
 import StoreLanding from "./pages/customer/StoreLanding";
+import ShopsPage from "./pages/customer/ShopsPage";
 import MenuPage from "./pages/customer/MenuPage";
 import CartPage from "./pages/customer/CartPage";
 import OrdersPage from "./pages/customer/OrdersPage";
@@ -29,9 +30,7 @@ import GiftCardsAdminPage from "./pages/merchant/GiftCardsAdminPage";
 import RewardsAdminPage from "./pages/merchant/RewardsAdminPage";
 import FeedbackAdminPage from "./pages/merchant/FeedbackAdminPage";
 import CrmPage from "./pages/merchant/CrmPage";
-import CampaignsPage from "./pages/merchant/CampaignsPage";
 import AnalyticsPage from "./pages/merchant/AnalyticsPage";
-import StaffPage from "./pages/merchant/StaffPage";
 import BillingPage from "./pages/merchant/BillingPage";
 import AdminOverviewPage from "./pages/admin/AdminOverviewPage";
 import AdminMerchantsPage from "./pages/admin/AdminMerchantsPage";
@@ -52,8 +51,9 @@ export default function App() {
         <Route path="/admin/login" element={<LoginPage admin />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/merchant/onboard" element={<OnboardPage />} />
+        <Route path="/shops" element={<AuthGate><ShopsPage /></AuthGate>} />
 
-        <Route path="/s/:code" element={<CustomerShell />}>
+        <Route path="/s/:code" element={<AuthGate><CustomerShell /></AuthGate>}>
           <Route index element={<StoreLanding />} />
           <Route path="t/:tableNumber" element={<StoreLanding />} />
           <Route path="menu" element={<MenuPage />} />
@@ -64,7 +64,7 @@ export default function App() {
           <Route path="scratch" element={<AuthGate><ScratchPage /></AuthGate>} />
           <Route path="rewards" element={<AuthGate><RewardsPage /></AuthGate>} />
           <Route path="queue" element={<QueuePage />} />
-          <Route path="feedback" element={<FeedbackPage />} />
+          <Route path="feedback" element={<AuthGate><FeedbackPage /></AuthGate>} />
         </Route>
 
         <Route
@@ -86,9 +86,7 @@ export default function App() {
           <Route path="rewards" element={<FeatureGate feature="DIGITAL_STAMPS" title="Digital stamp cards"><RewardsAdminPage /></FeatureGate>} />
           <Route path="feedback" element={<FeatureGate feature="FEEDBACK_INBOX" title="Feedback and complaint inbox"><FeedbackAdminPage /></FeatureGate>} />
           <Route path="crm" element={<FeatureGate feature="CUSTOMER_CRM" title="Customer CRM"><CrmPage /></FeatureGate>} />
-          <Route path="campaigns" element={<FeatureGate feature="WHATSAPP_CAMPAIGNS" title="WhatsApp campaigns"><CampaignsPage /></FeatureGate>} />
           <Route path="analytics" element={<FeatureGate feature="ANALYTICS" title="Analytics dashboard"><AnalyticsPage /></FeatureGate>} />
-          <Route path="staff" element={<FeatureGate feature="STAFF_ACCOUNTS" title="Staff accounts"><StaffPage /></FeatureGate>} />
           <Route path="billing" element={<BillingPage />} />
         </Route>
 

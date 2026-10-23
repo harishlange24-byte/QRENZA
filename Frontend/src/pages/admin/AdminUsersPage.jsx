@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { listAdminUsers, updateAdminUser } from "../../api/admin";
+import { toast } from "react-toastify";
+import { deleteAdminUser, listAdminUsers, updateAdminUser } from "../../api/admin";
 import { getErrorMessage } from "../../api/client";
 import { Alert, Button, Card, inputClass, PageTitle } from "../../components/ui";
 
@@ -38,9 +39,36 @@ export default function AdminUsersPage() {
       await updateAdminUser(id, payload);
     } catch (e) {
       setError(getErrorMessage(e));
+      toast.error(getErrorMessage(e));
     } finally {
       setBusy("");
       await load();
+    }
+  }
+
+  async function rename(row) {
+    const name = window.prompt("User name", row.name || "");
+    if (name === null || !name.trim() || name.trim() === row.name) return;
+    await update(row._id, { name: name.trim() });
+    toast.success("Name updated");
+  }
+
+  // A number that owns a merchant cannot be dropped, the API says so and we
+  // just surface that message.
+  async function remove(row) {
+    const label = row.name || row.phone;
+    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+
+    setError(""); setBusy(row._id);
+    try {
+      await deleteAdminUser(row._id);
+      toast.success("User deleted");
+      await load();
+    } catch (e) {
+      setError(getErrorMessage(e));
+      toast.error(getErrorMessage(e));
+    } finally {
+      setBusy("");
     }
   }
 
@@ -110,13 +138,29 @@ export default function AdminUsersPage() {
                     <td className="py-2 text-muted">{new Date(row.createdAt).toDateString()}</td>
                     <td className="py-2 text-muted">{row.lastLoginAt ? new Date(row.lastLoginAt).toDateString() : "-"}</td>
                     <td className="py-2">
-                      <button
-                        className="text-muted disabled:opacity-50"
-                        disabled={busy === row._id}
-                        onClick={() => update(row._id, { isActive: !row.isActive })}
-                      >
-                        {row.isActive ? "Deactivate" : "Activate"}
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          className="text-muted disabled:opacity-50"
+                          disabled={busy === row._id}
+                          onClick={() => update(row._id, { isActive: !row.isActive })}
+                        >
+                          {row.isActive ? "Deactivate" : "Activate"}
+                        </button>
+                        <button
+                          className="text-purple disabled:opacity-50"
+                          disabled={busy === row._id}
+                          onClick={() => rename(row)}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          className="text-muted disabled:opacity-50"
+                          disabled={busy === row._id}
+                          onClick={() => remove(row)}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

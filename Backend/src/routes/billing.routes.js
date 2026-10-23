@@ -6,6 +6,7 @@ import {
   verifyCheckout,
   handleWebhook,
   cancelRenewal,
+  resumeRenewal,
   requestRefund,
   requestPlanChange,
   requestEnterpriseQuote
@@ -20,6 +21,7 @@ router.post("/webhook", handleWebhook);
 router.post("/checkout", protect, authorize("MERCHANT"), createCheckout);
 router.post("/verify", protect, authorize("MERCHANT"), verifyCheckout);
 router.post("/cancel", protect, authorize("MERCHANT"), cancelRenewal);
+router.post("/resume", protect, authorize("MERCHANT"), resumeRenewal);
 router.post("/plan-change", protect, authorize("MERCHANT"), requestPlanChange);
 router.post("/enterprise", protect, authorize("MERCHANT"), requestEnterpriseQuote);
 router.post("/refunds", protect, authorize("MERCHANT"), requestRefund);

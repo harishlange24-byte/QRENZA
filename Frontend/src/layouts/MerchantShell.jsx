@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { AccessProvider, useAccess } from "../context/AccessContext";
@@ -19,11 +20,18 @@ const links = [
   ["/merchant/rewards", "Rewards", "DIGITAL_STAMPS"],
   ["/merchant/feedback", "Feedback", "FEEDBACK_INBOX"],
   ["/merchant/crm", "CRM", "CUSTOMER_CRM"],
-  ["/merchant/campaigns", "Campaigns", "WHATSAPP_CAMPAIGNS"],
   ["/merchant/analytics", "Analytics", "ANALYTICS"],
-  ["/merchant/staff", "Staff", "STAFF_ACCOUNTS"],
   ["/merchant/billing", "Billing", ""]
 ];
+
+// A plain three-line icon, no icon pack needed for one glyph.
+function MenuIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
 
 export default function MerchantShell() {
   return (
@@ -42,60 +50,109 @@ function ShellInner() {
   const { storeId, setStoreId, stores } = useMerchantStore();
   const { access } = useAccess();
 
+  // Two separate flags: a drawer for phones and a collapse for the desk layout.
+  const [drawer, setDrawer] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
   const planLocked = Boolean(access) && (!access.hasPlan || !access.isUsable);
   const isLocked = (feature) => Boolean(access) && !planLocked && !(access.features || []).includes(feature);
 
+  function signOut() {
+    dispatch(endSession());
+    navigate("/");
+  }
+
   return (
-    <div className="min-h-screen bg-paper md:grid md:grid-cols-[240px_1fr]">
-      <aside className="border-r border-line bg-panel p-4">
-        <p className="text-lg font-semibold text-ink">Qrenza</p>
-        <p className="mb-4 text-xs text-muted">{user?.phone}</p>
-        {stores.length ? (
-          <select className={`${inputClass} mb-3`} value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-            <option value="">Select store</option>
-            {stores.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        ) : (
-          <input
-            className={`${inputClass} mb-3`}
-            placeholder="Active store ID"
-            value={storeId}
-            onChange={(e) => setStoreId(e.target.value)}
+    <div className="min-h-screen bg-paper">
+      <div className={`md:grid ${collapsed ? "md:grid-cols-1" : "md:grid-cols-[240px_1fr]"}`}>
+        {drawer ? (
+          <button
+            aria-label="Close menu"
+            className="fixed inset-0 z-30 bg-ink/30 md:hidden"
+            onClick={() => setDrawer(false)}
           />
-        )}
-        <nav className="grid gap-1 text-sm">
-          {links.map(([to, label, feature]) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === "/merchant"}
-              className={({ isActive }) => `flex items-center justify-between rounded-xl px-3 py-2 ${isActive ? "bg-purple text-white" : "text-ink"}`}
-            >
-              {label}
-              {feature && isLocked(feature) ? (
-                <span className="rounded-full bg-lavender px-2 py-0.5 text-[10px] font-semibold uppercase text-ink">Locked</span>
-              ) : null}
-            </NavLink>
-          ))}
-        </nav>
-        {user?.role === "SUPER_ADMIN" ? (
-          <Link to="/admin" className="mt-4 block text-xs text-purple">Super admin</Link>
         ) : null}
-        <button className="mt-4 block text-xs text-muted" onClick={() => { dispatch(endSession()); navigate("/"); }}>Sign out</button>
-      </aside>
-      <main className="space-y-4 p-4 md:p-8">
-        {planLocked ? (
-          <div>
-            <Alert>
-              {access.messages?.[0] || "Your plan is not active."}{" "}
-              <Link to="/merchant/billing" className="font-semibold">Choose a plan</Link>
-            </Alert>
+
+        <aside
+          className={`fixed inset-y-0 left-0 z-40 w-64 overflow-y-auto border-r border-line bg-panel p-4 transition-transform duration-200 ${
+            drawer ? "translate-x-0" : "-translate-x-full"
+          } md:static md:z-auto md:translate-x-0 ${collapsed ? "md:hidden" : ""}`}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-lg font-semibold text-ink">Qrenza</p>
+            <button className="text-muted md:hidden" onClick={() => setDrawer(false)}>Close</button>
           </div>
-        ) : null}
-        <Outlet />
-      </main>
+          <p className="mb-4 text-xs text-muted">{user?.phone}</p>
+
+          {stores.length ? (
+            <select className={`${inputClass} mb-3`} value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+              <option value="">Select store</option>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              className={`${inputClass} mb-3`}
+              placeholder="Active store ID"
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+            />
+          )}
+
+          <nav className="grid gap-1 text-sm">
+            {links.map(([to, label, feature]) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/merchant"}
+                onClick={() => setDrawer(false)}
+                className={({ isActive }) => `flex items-center justify-between rounded-xl px-3 py-2 ${isActive ? "bg-purple text-white" : "text-ink"}`}
+              >
+                {label}
+                {feature && isLocked(feature) ? (
+                  <span className="rounded-full bg-lavender px-2 py-0.5 text-[10px] font-semibold uppercase text-ink">Locked</span>
+                ) : null}
+              </NavLink>
+            ))}
+          </nav>
+
+          {user?.role === "SUPER_ADMIN" ? (
+            <Link to="/admin" className="mt-4 block text-xs text-purple">Super admin</Link>
+          ) : null}
+          <button className="mt-4 block text-xs text-muted" onClick={signOut}>Sign out</button>
+        </aside>
+
+        <main className="min-w-0 space-y-4 p-4 md:p-8">
+          <div className="flex items-center gap-3">
+            <button
+              aria-label="Toggle menu"
+              className="rounded-xl border border-line bg-panel p-2 text-ink md:hidden"
+              onClick={() => setDrawer(true)}
+            >
+              <MenuIcon />
+            </button>
+            <button
+              aria-label="Collapse menu"
+              className="hidden rounded-xl border border-line bg-panel p-2 text-ink md:inline-flex"
+              onClick={() => setCollapsed((c) => !c)}
+            >
+              <MenuIcon />
+            </button>
+            <p className="text-sm font-semibold text-ink md:hidden">Qrenza</p>
+          </div>
+
+          {planLocked ? (
+            <div>
+              <Alert>
+                {access.messages?.[0] || "Your plan is not active."}{" "}
+                <Link to="/merchant/billing" className="font-semibold">Choose a plan</Link>
+              </Alert>
+            </div>
+          ) : null}
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }

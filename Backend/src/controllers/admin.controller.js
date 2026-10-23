@@ -1,6 +1,11 @@
 import Merchant from "../models/merchant.model.js";
 import Store from "../models/store.model.js";
 import User from "../models/user.model.js";
+import Menu from "../models/menu.model.js";
+import MenuCategory from "../models/menuCategory.model.js";
+import MenuItem from "../models/menuItem.model.js";
+import Table from "../models/table.model.js";
+import LoyaltyProgram from "../models/loyaltyProgram.model.js";
 import Subscription from "../models/subscription.model.js";
 import PaymentTransaction from "../models/paymentTransaction.model.js";
 import RefundRequest from "../models/refundRequest.model.js";
@@ -29,6 +34,22 @@ const parsePaging = (query) => {
 };
 
 const sumFromFacet = (rows, key) => (rows?.[0]?.[key]?.[0]?.total) || 0;
+
+// A store's catalogue only exists for that store, so it goes with it. Orders,
+// loyalty cards, gift cards and feedback stay behind as history.
+const purgeStore = async (storeId) => {
+    const menu = await Menu.findOne({ store: storeId }).select("_id").lean();
+
+    if (menu) {
+        await MenuItem.deleteMany({ menu: menu._id });
+        await MenuCategory.deleteMany({ menu: menu._id });
+        await Menu.deleteOne({ _id: menu._id });
+    }
+
+    await Table.deleteMany({ store: storeId });
+    await LoyaltyProgram.deleteMany({ store: storeId });
+    await Store.deleteOne({ _id: storeId });
+};
 
 // Platform wide dashboard counters. Everything is batched with Promise.all so a
 // single screen load never turns into a cascade of sequential queries.
@@ -261,36 +282,112 @@ const getMerchantDetail = async (req, res) => {
     }
 };
 
+// A super admin can rename a merchant, fix its contact details and switch it
+// off. Only the keys that were sent are changed.
 const updateMerchant = async (req, res) => {
     try {
-        const { status, note } = req.body || {};
-        const nextStatus = String(status || "").toUpperCase();
-
-        if (!Merchant.schema.path("status").enumValues.includes(nextStatus)) {
-            return res.status(400).json({ success: false, message: "status must be ACTIVE or SUSPENDED" });
-        }
+        const { status, businessName, contactEmail, contactPhone, note } = req.body || {};
 
         const merchant = await Merchant.findById(req.params.id);
         if (!merchant) {
             return res.status(404).json({ success: false, message: "Merchant not found" });
         }
 
-        const from = merchant.status;
-        merchant.status = nextStatus;
+        const from = {
+            status: merchant.status,
+            businessName: merchant.businessName,
+            contactEmail: merchant.contactEmail,
+            contactPhone: merchant.contactPhone
+        };
+
+        if (status !== undefined) {
+            const nextStatus = String(status).toUpperCase();
+
+            if (!Merchant.schema.path("status").enumValues.includes(nextStatus)) {
+                return res.status(400).json({ success: false, message: "status must be ACTIVE or SUSPENDED" });
+            }
+
+            merchant.status = nextStatus;
+        }
+
+        if (businessName !== undefined) {
+            if (!String(businessName).trim()) {
+                return res.status(400).json({ success: false, message: "Business name cannot be empty" });
+            }
+            merchant.businessName = String(businessName).trim();
+        }
+
+        if (contactEmail !== undefined) {
+            const email = String(contactEmail).trim().toLowerCase();
+
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                return res.status(400).json({ success: false, message: "Enter a valid contact email" });
+            }
+            merchant.contactEmail = email;
+        }
+
+        if (contactPhone !== undefined) {
+            if (!String(contactPhone).trim()) {
+                return res.status(400).json({ success: false, message: "Contact phone cannot be empty" });
+            }
+            merchant.contactPhone = String(contactPhone).trim();
+        }
+
         await merchant.save();
 
         await recordAudit(req, {
-            action: "MERCHANT_STATUS_UPDATED",
+            action: "MERCHANT_UPDATED",
             entityType: "Merchant",
             entityId: merchant._id,
             merchant: merchant._id,
-            details: { from, to: nextStatus, note: String(note || "").slice(0, 1000) }
+            details: {
+                from,
+                to: {
+                    status: merchant.status,
+                    businessName: merchant.businessName,
+                    contactEmail: merchant.contactEmail,
+                    contactPhone: merchant.contactPhone
+                },
+                note: String(note || "").slice(0, 1000)
+            }
         });
 
-        return res.status(200).json({ success: true, message: "Merchant status updated", data: { merchant } });
+        return res.status(200).json({ success: true, message: "Merchant updated", data: { merchant } });
     } catch (error) {
         console.error("updateMerchant error : ", error.message);
         return res.status(500).json({ success: false, message: "Unable to update merchant" });
+    }
+};
+
+// Removing a merchant also removes the locations that only exist for it (with
+// their menus and tables). Billing history is kept for the audit trail.
+const deleteMerchant = async (req, res) => {
+    try {
+        const merchant = await Merchant.findById(req.params.id);
+
+        if (!merchant) {
+            return res.status(404).json({ success: false, message: "Merchant not found" });
+        }
+
+        const stores = await Store.find({ merchant: merchant._id }).select("_id").lean();
+
+        for (const store of stores) {
+            await purgeStore(store._id);
+        }
+
+        await recordAudit(req, {
+            action: "MERCHANT_DELETED",
+            entityType: "Merchant",
+            entityId: merchant._id,
+            details: { businessName: merchant.businessName, storesRemoved: stores.length }
+        });
+
+        await Merchant.deleteOne({ _id: merchant._id });
+
+        return res.status(200).json({ success: true, message: "Merchant deleted" });
+    } catch (error) {
+        console.error("deleteMerchant error : ", error.message);
+        return res.status(500).json({ success: false, message: "Unable to delete merchant" });
     }
 };
 
@@ -326,35 +423,73 @@ const listStores = async (req, res) => {
 
 const updateStore = async (req, res) => {
     try {
-        const { status } = req.body || {};
-        const nextStatus = String(status || "").toUpperCase();
-
-        if (!Store.schema.path("status").enumValues.includes(nextStatus)) {
-            return res.status(400).json({ success: false, message: "status must be ACTIVE or SUSPENDED" });
-        }
+        const { status, name } = req.body || {};
 
         const store = await Store.findById(req.params.id);
         if (!store) {
             return res.status(404).json({ success: false, message: "Store not found" });
         }
 
-        const from = store.status;
-        store.status = nextStatus;
+        const from = { status: store.status, name: store.name };
+
+        if (status !== undefined) {
+            const nextStatus = String(status).toUpperCase();
+
+            if (!Store.schema.path("status").enumValues.includes(nextStatus)) {
+                return res.status(400).json({ success: false, message: "status must be ACTIVE or SUSPENDED" });
+            }
+
+            store.status = nextStatus;
+        }
+
+        if (name !== undefined) {
+            if (!String(name).trim()) {
+                return res.status(400).json({ success: false, message: "Store name cannot be empty" });
+            }
+            store.name = String(name).trim();
+        }
+
         await store.save();
 
         await recordAudit(req, {
-            action: "STORE_STATUS_UPDATED",
+            action: "STORE_UPDATED",
             entityType: "Store",
             entityId: store._id,
             merchant: store.merchant,
             store: store._id,
-            details: { from, to: nextStatus }
+            details: { from, to: { status: store.status, name: store.name } }
         });
 
-        return res.status(200).json({ success: true, message: "Store status updated", data: { store } });
+        return res.status(200).json({ success: true, message: "Store updated", data: { store } });
     } catch (error) {
         console.error("updateStore error : ", error.message);
         return res.status(500).json({ success: false, message: "Unable to update store" });
+    }
+};
+
+// Same cascade the merchant gets when they delete their own location.
+const deleteStore = async (req, res) => {
+    try {
+        const store = await Store.findById(req.params.id);
+
+        if (!store) {
+            return res.status(404).json({ success: false, message: "Store not found" });
+        }
+
+        await recordAudit(req, {
+            action: "STORE_DELETED",
+            entityType: "Store",
+            entityId: store._id,
+            merchant: store.merchant,
+            details: { name: store.name, publicCode: store.publicCode }
+        });
+
+        await purgeStore(store._id);
+
+        return res.status(200).json({ success: true, message: "Store deleted" });
+    } catch (error) {
+        console.error("deleteStore error : ", error.message);
+        return res.status(500).json({ success: false, message: "Unable to delete store" });
     }
 };
 
@@ -390,7 +525,7 @@ const listUsers = async (req, res) => {
 // self deactivation are refused.
 const updateUser = async (req, res) => {
     try {
-        const { role, isActive } = req.body || {};
+        const { role, isActive, name } = req.body || {};
 
         const user = await User.findById(req.params.id);
         if (!user) {
@@ -400,6 +535,14 @@ const updateUser = async (req, res) => {
         const isSelf = String(user._id) === String(req.user._id);
 
         const changes = {};
+
+        if (name !== undefined) {
+            if (!String(name).trim()) {
+                return res.status(400).json({ success: false, message: "Name cannot be empty" });
+            }
+            changes.name = String(name).trim();
+        }
+
         if (role !== undefined) {
             const nextRole = String(role).toUpperCase();
             if (!USER_ROLES.includes(nextRole)) {
@@ -438,6 +581,45 @@ const updateUser = async (req, res) => {
     } catch (error) {
         console.error("updateUser error : ", error.message);
         return res.status(500).json({ success: false, message: "Unable to update user" });
+    }
+};
+
+// Deleting an account that still owns a shop would leave that shop without an
+// owner, so the admin is pointed at the merchant first.
+const deleteUser = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        if (String(user._id) === String(req.user._id)) {
+            return res.status(400).json({ success: false, message: "You cannot delete your own account" });
+        }
+
+        const ownedMerchant = await Merchant.findOne({ owner: user._id }).select("businessName").lean();
+
+        if (ownedMerchant) {
+            return res.status(409).json({
+                success: false,
+                message: `This number owns ${ownedMerchant.businessName}. Delete the merchant account first.`
+            });
+        }
+
+        await recordAudit(req, {
+            action: "USER_DELETED",
+            entityType: "User",
+            entityId: user._id,
+            details: { phone: user.phone, role: user.role }
+        });
+
+        await User.deleteOne({ _id: user._id });
+
+        return res.status(200).json({ success: true, message: "User deleted" });
+    } catch (error) {
+        console.error("deleteUser error : ", error.message);
+        return res.status(500).json({ success: false, message: "Unable to delete user" });
     }
 };
 
@@ -570,10 +752,13 @@ export {
     listMerchants,
     getMerchantDetail,
     updateMerchant,
+    deleteMerchant,
     listStores,
     updateStore,
+    deleteStore,
     listUsers,
     updateUser,
+    deleteUser,
     getAlerts,
     listAuditLogs
 };

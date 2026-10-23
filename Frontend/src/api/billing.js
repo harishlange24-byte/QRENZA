@@ -28,6 +28,10 @@ export function cancelSubscription(reason) {
   return client.post("/billing/cancel", { reason });
 }
 
+export function resumeSubscription() {
+  return client.post("/billing/resume");
+}
+
 export function requestPlanChange(planCode, note) {
   return client.post("/billing/plan-change", { planCode, note });
 }

@@ -48,28 +48,49 @@ import { buildPlanSnapshot } from "../services/entitlement.service.js";
 const daysAgo = (n) => new Date(Date.now() - n * 24 * 60 * 60 * 1000);
 const hoursAgo = (n) => new Date(Date.now() - n * 60 * 60 * 1000);
 const minutesFromNow = (n) => new Date(Date.now() + n * 60 * 1000);
+const minutesAgo = (n) => new Date(Date.now() - n * 60 * 1000);
 const visitDay = (date) => date.toISOString().slice(0, 10);
 
-const CUSTOMERS = [
-  {
-    phone: "9811100011",
-    name: "Priya Nair",
-    email: "priya.nair@example.com",
-    lastLoginAt: hoursAgo(3)
-  },
-  {
-    phone: "9811100022",
-    name: "Arjun Desai",
-    email: "arjun.desai@example.com",
-    lastLoginAt: daysAgo(2)
-  },
-  {
-    phone: "9811100033",
-    name: "Sneha Kapoor",
-    email: "sneha.kapoor@example.com",
-    lastLoginAt: daysAgo(9)
-  }
+// A wider cast so the queue, CRM, orders and gift card screens have real
+// depth. Phones are built from a fixed prefix so every re-run maps back to the
+// same account instead of creating a new one.
+const CUSTOMER_NAMES = [
+  "Priya Nair",
+  "Arjun Desai",
+  "Sneha Kapoor",
+  "Rahul Verma",
+  "Ananya Iyer",
+  "Kabir Menon",
+  "Divya Sharma",
+  "Rohit Gupta",
+  "Megha Joshi",
+  "Aditya Rao",
+  "Neha Patel",
+  "Siddharth Bose",
+  "Isha Reddy",
+  "Varun Malhotra",
+  "Pooja Sinha",
+  "Harsh Vardhan",
+  "Tanvi Kulkarni",
+  "Manav Chopra",
+  "Ritika Bansal",
+  "Ayaan Khan",
+  "Shreya Dutta",
+  "Nikhil Saxena",
+  "Anjali Nambiar",
+  "Yash Thakur"
 ];
+
+const CUSTOMERS = CUSTOMER_NAMES.map((name, i) => {
+  const handle = name.toLowerCase().replace(/[^a-z]+/g, ".").replace(/^\.|\.$/g, "");
+
+  return {
+    phone: i < 3 ? `98111000${[11, 22, 33][i]}` : `98111100${String(i).padStart(2, "0")}`,
+    name,
+    email: `${handle}@example.com`,
+    lastLoginAt: hoursAgo((i * 5) % 96)
+  };
+});
 
 const MERCHANTS = [
   {
@@ -344,7 +365,15 @@ async function ensureMenu(store, menuSeed, createdItems) {
 async function ensureLoyaltyProgram(store) {
   return LoyaltyProgram.findOneAndUpdate(
     { store: store._id },
-    { $set: { name: `${store.name} Rewards`, stampsRequired: 10, stampRule: "ONE_PER_PURCHASE", isActive: true } },
+    {
+      $set: {
+        name: `${store.name} Rewards`,
+        rewardText: "A free signature item from the counter",
+        stampsRequired: 10,
+        stampRule: "ONE_PER_PURCHASE",
+        isActive: true
+      }
+    },
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
   );
 }
@@ -376,7 +405,9 @@ async function ensureFeedbackAndIssue(store, user, rating, comment, category) {
 }
 
 async function ensureOrders(store, customer, itemSeeds, plan) {
-  // Skip if this store already carries demo orders so re-runs stay clean.
+  // Leave a store alone once it already has a believable order history.
+  if ((await Order.countDocuments({ store: store._id })) >= 6) return [];
+
   const existing = await Order.exists({ store: store._id, customerPhone: customer.phone });
   if (existing) return [];
 
@@ -405,7 +436,7 @@ async function ensureOrders(store, customer, itemSeeds, plan) {
     { status: "CANCELLED", created: daysAgo(4), ready: daysAgo(4), table: "" }
   ];
 
-  if (plan.code === "BASIC") specs.splice(0, specs.length - 3); // trial shop has a lighter history
+  if (plan?.code === "BASIC") specs.splice(0, specs.length - 3); // trial shop has a lighter history
 
   for (let i = 0; i < specs.length; i++) {
     const spec = specs[i];
@@ -432,7 +463,7 @@ async function ensureOrders(store, customer, itemSeeds, plan) {
   return created;
 }
 
-async function ensureQueue(store, customer) {
+async function ensureQueue(store, customers) {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
@@ -443,39 +474,64 @@ async function ensureQueue(store, customer) {
         store: store._id,
         serviceDate: startOfDay,
         status: "OPEN",
-        averageServiceMinutes: 10,
-        lastIssuedToken: 2,
-        lastServedToken: 1
+        averageServiceMinutes: 10
       }
     },
     { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
   );
 
-  const waiting = await QueueEntry.findOneAndUpdate(
-    { queue: queue._id, tokenNumber: 1 },
-    {
-      $setOnInsert: {
-        queue: queue._id,
-        store: store._id,
-        user: customer._id,
-        customerName: customer.name,
-        customerPhone: customer.phone,
-        tokenNumber: 1,
-        status: "WAITING",
-        positionAtJoin: 1,
-        estimatedWaitMinutes: 8
-      }
-    },
-    { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
+  // A real line so the desk has tokens to call, serve and skip: one already
+  // served, one being called, the rest still waiting.
+  const rows = [
+    { token: 1, status: "SERVED" },
+    { token: 2, status: "CALLED" },
+    { token: 3, status: "WAITING" },
+    { token: 4, status: "WAITING" },
+    { token: 5, status: "WAITING" },
+    { token: 6, status: "WAITING" },
+    { token: 7, status: "WAITING" },
+    { token: 8, status: "WAITING" }
+  ];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const customer = customers[i % customers.length];
+
+    await QueueEntry.findOneAndUpdate(
+      { queue: queue._id, tokenNumber: row.token },
+      {
+        $setOnInsert: {
+          queue: queue._id,
+          store: store._id,
+          user: customer._id,
+          customerName: customer.name,
+          customerPhone: customer.phone,
+          tokenNumber: row.token,
+          status: row.status,
+          positionAtJoin: row.token,
+          estimatedWaitMinutes: row.status === "WAITING" ? row.token * 10 : 0,
+          joinedAt: minutesAgo(row.token * 6)
+        }
+      },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
+  }
+
+  await Queue.updateOne(
+    { _id: queue._id },
+    { $max: { lastIssuedToken: rows.length, lastServedToken: 1 } }
   );
 
-  return { queue, waiting };
+  return queue;
 }
 
 async function ensureGiftCards(store, customer) {
+  // One card per customer, keyed on the phone so re-runs never pile up.
+  const tag = customer.phone.slice(-4);
+
   const seeds = [
-    { code: `GC-${store.publicCode}-A`, title: "10% off your next order", type: "DISCOUNT", discountType: "PERCENTAGE", value: 10, source: "STREAK", visitCount: 7, status: "ACTIVE" },
-    { code: `GC-${store.publicCode}-B`, title: "Free filter coffee", type: "FREE_ITEM", discountType: null, value: 0, freeItemName: "Filter Coffee", source: "MERCHANT", status: "ACTIVE" }
+    { code: `GC-${store.publicCode}-${tag}-A`, title: "10% off your next order", type: "DISCOUNT", discountType: "PERCENTAGE", value: 10, source: "STREAK", visitCount: 7, status: "ACTIVE" },
+    { code: `GC-${store.publicCode}-${tag}-B`, title: "Free filter coffee", type: "FREE_ITEM", discountType: null, value: 0, freeItemName: "Filter Coffee", source: "MERCHANT", status: "ACTIVE" }
   ];
 
   const created = [];
@@ -508,25 +564,71 @@ async function ensureGiftCards(store, customer) {
   return created;
 }
 
-async function seedStoreExperiences(merchant, store, plan, customers, createdItems) {
+async function seedStoreExperiences(merchant, store, customers, plan) {
   const program = await ensureLoyaltyProgram(store);
 
-  const storeItems = createdItems.filter((item) => String(item.store) === String(store._id));
+  const storeItems = await MenuItem.find({ store: store._id }).sort({ sortOrder: 1 });
 
-  // Rewards available to scratch/loyalty winners.
-  let reward = await Reward.findOne({ store: store._id, name: "Free Dessert" });
-  if (!reward) {
-    reward = await Reward.create({
-      store: store._id,
-      program: program._id,
+  // A small reward board so the scratch card, the loyalty card and the gift
+  // card streak all have something real to pay out.
+  const rewardSeeds = [
+    {
       name: "Free Dessert",
       description: "A free dessert on your next visit.",
       type: "FREE_ITEM",
+      discountType: null,
       value: 0,
-      probability: 20,
-      validityDays: 30
-    });
+      probability: 20
+    },
+    {
+      name: "10% off the bill",
+      description: "Ten percent off, scanned at the counter.",
+      type: "DISCOUNT",
+      discountType: "PERCENTAGE",
+      value: 10,
+      probability: 35
+    },
+    {
+      name: "Free Masala Chai",
+      description: "One chai on the house.",
+      type: "FREE_ITEM",
+      discountType: null,
+      value: 0,
+      probability: 15
+    },
+    {
+      // Mirrors the loyalty screen text so a filled stamp card always pays out.
+      name: `Loyalty: ${program.rewardText || "Counter treat"}`,
+      description: `Unlocked after ${program.stampsRequired} stamps`,
+      type: "CUSTOM",
+      discountType: null,
+      value: 0,
+      probability: 0
+    }
+  ];
+
+  for (const seed of rewardSeeds) {
+    await Reward.findOneAndUpdate(
+      { store: store._id, name: seed.name },
+      {
+        $set: {
+          program: program._id,
+          description: seed.description,
+          type: seed.type,
+          discountType: seed.discountType,
+          value: seed.value,
+          probability: seed.probability,
+          maxClaims: null,
+          validityDays: 30,
+          isActive: true
+        }
+      },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true }
+    );
   }
+
+  const rewards = await Reward.find({ store: store._id, isActive: true }).sort({ createdAt: 1 });
+  const prizeReward = rewards.find((row) => row.name.startsWith("Loyalty:")) || rewards[0];
 
   let coupon = await Coupon.findOne({ code: `WELCOME-${store.publicCode}` });
   if (!coupon) {
@@ -542,26 +644,9 @@ async function seedStoreExperiences(merchant, store, plan, customers, createdIte
     });
   }
 
-  // Campaign touch so the marketing screen is not empty.
-  const campaignExists = await Campaign.exists({ store: store._id });
-  if (!campaignExists) {
-    await Campaign.create({
-      store: store._id,
-      createdBy: merchant.owner,
-      name: "Weekend comeback offer",
-      channel: "WHATSAPP",
-      audience: { segment: "INACTIVE_CUSTOMERS", inactiveDays: 14 },
-      messageTemplate: `Hi! We miss you at ${store.name}. Here is 15% off this weekend.`,
-      status: "COMPLETED",
-      totalRecipients: 12,
-      sentCount: 12,
-      deliveredCount: 11
-    });
-  }
-
   for (let i = 0; i < customers.length; i++) {
     const customer = customers[i];
-    const stamps = [8, 5, 3][i % 3];
+    const stamps = [8, 5, 3, 9, 1, 6][i % 6];
 
     const card = await LoyaltyCard.findOneAndUpdate(
       { user: customer._id, store: store._id },
@@ -570,7 +655,7 @@ async function seedStoreExperiences(merchant, store, plan, customers, createdIte
           program: program._id,
           stamps,
           totalStampsEarned: stamps + 4,
-          totalRewardsEarned: i === 0 ? 1 : 0,
+          totalRewardsEarned: i % 3 === 0 ? 1 : 0,
           status: "ACTIVE"
         }
       },
@@ -578,12 +663,16 @@ async function seedStoreExperiences(merchant, store, plan, customers, createdIte
     );
 
     // One transaction per stamp so the CRM profile has a timeline.
-    const existingTxn = await LoyaltyTransaction.exists({ user: customer._id, store: card._id });
+    const existingTxn = await LoyaltyTransaction.exists({
+      user: customer._id,
+      $or: [{ store: store._id }, { store: card._id }]
+    });
+
     if (!existingTxn) {
       for (let s = 1; s <= stamps; s++) {
         await LoyaltyTransaction.create({
           user: customer._id,
-          store: card._id,
+          store: store._id,
           type: "STAMP",
           delta: 1,
           balanceAfter: s,
@@ -604,37 +693,58 @@ async function seedStoreExperiences(merchant, store, plan, customers, createdIte
       );
     }
 
-    await ensureGiftCards(store, customer);
+    // Gift cards for every fourth customer keeps the wallet readable.
+    if (i % 4 === 0) {
+      await ensureGiftCards(store, customer);
+    }
+
     await ensureOrders(store, customer, storeItems, plan);
 
-    // A reward claim for the first customer only, so counts are believable.
-    if (i === 0) {
-      const claim = await RewardClaim.findOne({ user: customer._id, store: store._id });
-      if (!claim) {
-        await RewardClaim.create({
-          user: customer._id,
-          store: store._id,
-          reward: reward._id,
-          source: "SCRATCH",
-          code: `RC-${store.publicCode}-${customer.phone.slice(-4)}`,
-          status: "ACTIVE",
-          expiresAt: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000)
-        });
-      }
+    // A reward claim every third customer so the redemption rate is believable.
+    if (prizeReward && i % 3 === 0) {
+      await RewardClaim.findOneAndUpdate(
+        { code: `RC-${store.publicCode}-${customer.phone.slice(-4)}` },
+        {
+          $setOnInsert: {
+            user: customer._id,
+            store: store._id,
+            reward: prizeReward._id,
+            source: "SCRATCH",
+            status: "ACTIVE",
+            expiresAt: new Date(Date.now() + 20 * 24 * 60 * 60 * 1000)
+          }
+        },
+        { upsert: true, setDefaultsOnInsert: true }
+      );
     }
   }
 
-  // Feedback: a happy one and a rough one so the inbox shows both paths.
-  await ensureFeedbackAndIssue(store, customers[0], 5, `Loved the ${storeItems[0]?.name || "food"} here.`, "PRODUCT");
-  await ensureFeedbackAndIssue(store, customers[2], 2, `Wait time was long during lunch.`, "WAIT_TIME");
+  // Feedback across the whole rating range so the inbox shows every path.
+  const feedbackSeeds = [
+    [0, 5, `Loved the ${storeItems[0]?.name || "food"} here.`, "PRODUCT"],
+    [2, 2, "Wait time was long during lunch.", "WAIT_TIME"],
+    [5, 4, "Great service, will come back.", "SERVICE"],
+    [8, 1, "My order came out cold.", "PRODUCT"],
+    [11, 3, "Portions could be bigger for the price.", "PRICE"]
+  ];
 
-  await ensureQueue(store, customers[1]);
+  for (const [index, rating, comment, category] of feedbackSeeds) {
+    await ensureFeedbackAndIssue(
+      store,
+      customers[index % customers.length],
+      rating,
+      comment,
+      category
+    );
+  }
+
+  await ensureQueue(store, customers);
 
   // History for the analytics chart.
   const existingEvent = await AnalyticsEvent.exists({ store: store._id });
   if (!existingEvent) {
-    for (let d = 0; d < 14; d++) {
-      const rows = 2 + ((d * 3) % 5);
+    for (let d = 0; d < 21; d++) {
+      const rows = 2 + ((d * 3) % 6);
       for (let r = 0; r < rows; r++) {
         await AnalyticsEvent.create({
           store: store._id,
@@ -695,6 +805,37 @@ async function seedBillingExtras(merchant, plan) {
   }
 }
 
+// The account the owner logs in with sits outside the demo cast. Its stores
+// already exist, so fill them with the same kind of activity instead of
+// leaving the queue, orders and loyalty screens empty.
+const OWNER_TEST_PHONE = process.env.SEED_OWNER_PHONE || "6266280010";
+
+async function seedOwnerMerchant(customers) {
+  const owner = await User.findOne({ phone: OWNER_TEST_PHONE });
+  if (!owner) return 0;
+
+  const merchant = await Merchant.findOne({ owner: owner._id });
+  if (!merchant) return 0;
+
+  const stores = await Store.find({ merchant: merchant._id });
+  const sub = await Subscription.findOne({ merchant: merchant._id, isCurrent: true });
+  const plan = sub?.planCode ? await Plan.findOne({ code: sub.planCode }) : null;
+
+  for (const store of stores) {
+    // Only lay a demo menu down when the shop has none, so a real menu is
+    // never mixed with the sample drinks.
+    const itemCount = await MenuItem.countDocuments({ store: store._id });
+    const createdItems = [];
+    if (itemCount === 0) {
+      await ensureMenu(store, MERCHANTS[0].menu, createdItems);
+    }
+    await ensureTables(store);
+    await seedStoreExperiences(merchant, store, customers, plan);
+  }
+
+  return stores.length;
+}
+
 async function run() {
   await mongoose.connect(process.env.MONGO_URI);
   console.log("Connected. Seeding demo data (existing records are kept)...");
@@ -723,7 +864,7 @@ async function run() {
       const store = await ensureStore(merchant, storeSeed);
       await ensureMenu(store, seed.menu, createdItems);
       await ensureTables(store);
-      await seedStoreExperiences(merchant, store, plan, customers, createdItems);
+      await seedStoreExperiences(merchant, store, customers, plan);
     }
 
     await seedBillingExtras(merchant, plan);
@@ -744,6 +885,11 @@ async function run() {
 
     console.log(`Merchant ready : ${seed.business.businessName} (${seed.planCode}/${seed.subscriptionStatus})`);
     merchantIndex += 1;
+  }
+
+  const ownerStores = await seedOwnerMerchant(customers);
+  if (ownerStores) {
+    console.log(`Owner account  : ${OWNER_TEST_PHONE} (${ownerStores} store${ownerStores > 1 ? "s" : ""} filled)`);
   }
 
   console.log("==================================");

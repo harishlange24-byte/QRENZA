@@ -341,6 +341,50 @@ const cancelRenewal = async (req, res) => {
   }
 };
 
+// Undo a scheduled cancellation while the paid period is still running.
+const resumeRenewal = async (req, res) => {
+  try {
+    const merchant = await findMerchantForUser(req.user._id);
+    if (!merchant) {
+      return res.status(404).json({ success: false, message: "Merchant account not found" });
+    }
+
+    const subscription = await getCurrentSubscription(merchant._id);
+    if (!subscription) {
+      return res.status(404).json({ success: false, message: "No subscription to resume" });
+    }
+    if (!subscription.cancelAtPeriodEnd) {
+      return res.status(409).json({ success: false, message: "Renewal is not cancelled" });
+    }
+
+    subscription.status = subscription.isTrial ? "TRIALING" : "ACTIVE";
+    subscription.cancelAtPeriodEnd = false;
+    subscription.autoRenew = !subscription.isTrial;
+    subscription.renewalStatus = "NONE";
+    subscription.cancelledAt = null;
+    subscription.cancellationReason = "";
+    await subscription.save();
+
+    await recordAudit(req, {
+      action: "SUBSCRIPTION_RESUMED",
+      entityType: "Subscription",
+      entityId: subscription._id,
+      merchant: merchant._id
+    });
+
+    const access = await resolveAccess(merchant._id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Renewal resumed. Your plan will renew at the end of the current period.",
+      access
+    });
+  } catch (error) {
+    console.error("resumeRenewal error : ", error.message);
+    return res.status(500).json({ success: false, message: "Unable to resume renewal" });
+  }
+};
+
 // Requesting a refund is not the same as a processed refund.
 const requestRefund = async (req, res) => {
   try {
@@ -543,6 +587,7 @@ export {
   verifyCheckout,
   handleWebhook,
   cancelRenewal,
+  resumeRenewal,
   requestRefund,
   requestPlanChange,
   requestEnterpriseQuote

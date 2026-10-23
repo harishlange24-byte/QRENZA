@@ -27,8 +27,16 @@ export function MerchantStoreProvider({ children }) {
     saveId(id);
   }
 
+  function removeStore(id) {
+    const next = stores.filter((s) => s.id !== id);
+    setStores(next);
+    localStorage.setItem("qrenzaStores", JSON.stringify(next));
+    // If the store that just went away was the selected one, drop back to none.
+    if (id === storeId) saveId("");
+  }
+
   const value = useMemo(
-    () => ({ storeId, setStoreId: saveId, stores, upsertStore }),
+    () => ({ storeId, setStoreId: saveId, stores, upsertStore, removeStore }),
     [storeId, stores]
   );
   return <MerchantStoreContext.Provider value={value}>{children}</MerchantStoreContext.Provider>;

@@ -11,7 +11,7 @@ export default function RewardsPage() {
 
   useEffect(() => {
     getMyRewards(code)
-      .then(({ data }) => setClaims(data.claims || data.rewards || []))
+      .then(({ data }) => setClaims(data.data?.claims || []))
       .catch((e) => setError(getErrorMessage(e)));
   }, [code]);
 

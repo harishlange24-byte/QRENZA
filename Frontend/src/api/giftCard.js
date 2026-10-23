@@ -16,3 +16,7 @@ export function listStoreGiftCards(storeId) {
 export function createGiftCard(storeId, payload) {
   return client.post(`/store/${storeId}/gift-cards`, payload);
 }
+
+export function deleteGiftCard(storeId, giftCardId) {
+  return client.delete(`/store/${storeId}/gift-cards/${giftCardId}`);
+}

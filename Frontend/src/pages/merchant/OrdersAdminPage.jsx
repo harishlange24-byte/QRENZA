@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { toast } from "react-toastify";
 import { listStoreOrders, updateOrderStatus } from "../../api/order";
 import { getErrorMessage } from "../../api/client";
 import { joinStoreRoom } from "../../lib/socket";
+import { FEATURE_LABELS } from "../../lib/features";
 import { Alert, Button, Card, Empty, PageTitle } from "../../components/ui";
 import { useMerchantStore } from "../../context/MerchantStoreContext";
 import { useAccess } from "../../context/AccessContext";
@@ -31,28 +33,6 @@ const FILTERS = [
   ["CANCELLED", "Cancelled"]
 ];
 
-// Plain labels for the plan chip so the desk explains its own limits.
-const FEATURE_LABELS = {
-  DIGITAL_STAMPS: "Digital stamps",
-  AI_MENU: "Digital menu",
-  ONLINE_ORDERING: "Table ordering",
-  SCRATCH_CARDS: "Scratch cards",
-  QR_QUEUE: "Smart queue",
-  FEEDBACK_INBOX: "Feedback inbox",
-  CUSTOMER_CRM: "Customer CRM",
-  UNLIMITED_QR_SCANS: "Unlimited scans",
-  ANALYTICS: "Analytics",
-  MULTI_BRANCH_QR: "One QR for branches",
-  GPS_BRANCH_DETECTION: "GPS branch detect",
-  BRANCH_ANALYTICS: "Branch analytics",
-  WHATSAPP_CAMPAIGNS: "WhatsApp campaigns",
-  STAFF_ACCOUNTS: "Staff accounts",
-  PRIORITY_SUPPORT: "Priority support",
-  DEDICATED_ACCOUNT_MANAGER: "Account manager",
-  FREE_QR_STAND: "Free QR stand",
-  ENTERPRISE_CUSTOM: "Custom setup"
-};
-
 function minutesLeft(order) {
   if (["READY", "SERVED", "CANCELLED"].includes(order.status)) return 0;
   return Math.max(0, Math.ceil((new Date(order.estimatedReadyAt).getTime() - Date.now()) / 60000));
@@ -70,8 +50,8 @@ export default function OrdersAdminPage() {
     if (!storeId) return;
     try {
       const { data } = await listStoreOrders(storeId, status);
-      setOrders(data.orders || []);
-      setCounts(data.counts || {});
+      setOrders(data.data?.orders || []);
+      setCounts(data.data?.counts || {});
     } catch (e) {
       setError(getErrorMessage(e));
     }
@@ -88,8 +68,14 @@ export default function OrdersAdminPage() {
 
   function move(orderId, status) {
     updateOrderStatus(storeId, orderId, status)
-      .then(() => load(filter))
-      .catch((e) => setError(getErrorMessage(e)));
+      .then(() => {
+        toast.success(`Order marked ${status.toLowerCase()}`);
+        load(filter);
+      })
+      .catch((e) => {
+        setError(getErrorMessage(e));
+        toast.error(getErrorMessage(e));
+      });
   }
 
   if (!storeId) {

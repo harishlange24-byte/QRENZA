@@ -1,21 +1,32 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { getAdminMerchant, updateAdminMerchant } from "../../api/admin";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { toast } from "react-toastify";
+import { deleteAdminMerchant, getAdminMerchant, updateAdminMerchant } from "../../api/admin";
 import { getErrorMessage } from "../../api/client";
-import { Alert, Button, Card, PageTitle } from "../../components/ui";
+import { Alert, Button, Card, Field, inputClass, PageTitle } from "../../components/ui";
 
 const money = (paise) => (paise === null || paise === undefined ? "-" : `₹${(paise / 100).toLocaleString("en-IN")}`);
 
 export default function AdminMerchantDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [edit, setEdit] = useState({ businessName: "", contactEmail: "", contactPhone: "" });
 
   async function load() {
     try {
       const { data: res } = await getAdminMerchant(id);
-      setData(res.data || null);
+      const payload = res.data || null;
+      setData(payload);
+      if (payload?.merchant) {
+        setEdit({
+          businessName: payload.merchant.businessName || "",
+          contactEmail: payload.merchant.contactEmail || "",
+          contactPhone: payload.merchant.contactPhone || ""
+        });
+      }
     } catch (e) {
       setError(getErrorMessage(e));
     }
@@ -38,7 +49,43 @@ export default function AdminMerchantDetailPage() {
       await load();
     } catch (e) {
       setError(getErrorMessage(e));
+      toast.error(getErrorMessage(e));
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveDetails(event) {
+    event.preventDefault();
+    setError(""); setBusy(true);
+    try {
+      await updateAdminMerchant(id, {
+        businessName: edit.businessName,
+        contactEmail: edit.contactEmail,
+        contactPhone: edit.contactPhone
+      });
+      toast.success("Merchant updated");
+      await load();
+    } catch (e) {
+      setError(getErrorMessage(e));
+      toast.error(getErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Takes the merchant, its stores and their catalogues with it.
+  async function remove() {
+    if (!window.confirm(`Delete "${merchant.businessName}" and every store under it? This cannot be undone.`)) return;
+
+    setError(""); setBusy(true);
+    try {
+      await deleteAdminMerchant(id);
+      toast.success("Merchant deleted");
+      navigate("/admin/merchants");
+    } catch (e) {
+      setError(getErrorMessage(e));
+      toast.error(getErrorMessage(e));
       setBusy(false);
     }
   }
@@ -60,14 +107,47 @@ export default function AdminMerchantDetailPage() {
               {owner ? <p>Owner: <span className="text-ink">{owner.phone}</span></p> : null}
             </div>
           </div>
-          <Button
-            variant="ghost"
-            disabled={busy}
-            onClick={() => setStatus(merchant.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE")}
-          >
-            {merchant.status === "ACTIVE" ? "Suspend" : "Activate"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => setStatus(merchant.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE")}
+            >
+              {merchant.status === "ACTIVE" ? "Suspend" : "Activate"}
+            </Button>
+            <Button variant="ghost" disabled={busy} onClick={remove}>Delete merchant</Button>
+          </div>
         </div>
+      </Card>
+
+      <Card>
+        <p className="mb-3 text-sm font-semibold text-ink">Edit details</p>
+        <form className="grid gap-3 sm:grid-cols-3" onSubmit={saveDetails}>
+          <Field label="Business name">
+            <input
+              className={inputClass}
+              value={edit.businessName}
+              onChange={(e) => setEdit({ ...edit, businessName: e.target.value })}
+            />
+          </Field>
+          <Field label="Contact email">
+            <input
+              className={inputClass}
+              value={edit.contactEmail}
+              onChange={(e) => setEdit({ ...edit, contactEmail: e.target.value })}
+            />
+          </Field>
+          <Field label="Contact phone">
+            <input
+              className={inputClass}
+              value={edit.contactPhone}
+              onChange={(e) => setEdit({ ...edit, contactPhone: e.target.value })}
+            />
+          </Field>
+          <div className="sm:col-span-3">
+            <Button disabled={busy}>Save changes</Button>
+          </div>
+        </form>
       </Card>
 
       <Card>

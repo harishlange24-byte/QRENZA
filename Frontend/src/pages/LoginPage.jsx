@@ -3,8 +3,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { otpSchema, phoneSchema } from "../lib/schemas";
-import { confirmOtp, requestOtp } from "../store/authSlice";
+import { toast } from "react-toastify";
+import { adminLoginSchema, otpSchema, phoneSchema } from "../lib/schemas";
+import { adminSignIn, confirmOtp, requestOtp } from "../store/authSlice";
 import SiteHeader from "../components/SiteHeader";
 import { Alert, Button, Card, Field, inputClass, PageTitle } from "../components/ui";
 
@@ -26,7 +27,11 @@ function landingFor(from, role, admin) {
   }
 
   const guestArea = deepLink && !deepLink.startsWith("/merchant") && !deepLink.startsWith("/admin");
-  return guestArea ? deepLink : "/";
+  if (guestArea) return deepLink;
+
+  // A customer who came straight to the site lands on the shops list, not on a
+  // marketing page they have already read.
+  return "/shops";
 }
 
 export default function LoginPage({ admin = false }) {
@@ -46,15 +51,35 @@ export default function LoginPage({ admin = false }) {
 
   const phoneForm = useForm({ resolver: zodResolver(phoneSchema), defaultValues: { phone: "" } });
   const otpForm = useForm({ resolver: zodResolver(otpSchema), defaultValues: { otp: "" } });
+  const adminForm = useForm({ resolver: zodResolver(adminLoginSchema), defaultValues: { email: "", password: "" } });
+
+  async function onAdmin(values) {
+    try {
+      await dispatch(adminSignIn(values)).unwrap();
+      toast.success("Logged in");
+    } catch (e) {
+      toast.error(e || "Invalid email or password");
+    }
+  }
 
   async function onPhone(values) {
-    await dispatch(requestOtp(values.phone));
+    try {
+      const result = await dispatch(requestOtp(values.phone)).unwrap();
+      toast.success(result.message || "OTP sent");
+    } catch (e) {
+      toast.error(e || "Could not send the OTP");
+    }
   }
 
   async function onOtp(values) {
     // Redirect is left to the effect above so a fresh login and a page reload
     // resolve the destination through the exact same role check.
-    await dispatch(confirmOtp({ phone, otp: values.otp }));
+    try {
+      await dispatch(confirmOtp({ phone, otp: values.otp })).unwrap();
+      toast.success("Logged in");
+    } catch (e) {
+      toast.error(e || "That OTP did not work");
+    }
   }
 
   return (
@@ -64,11 +89,27 @@ export default function LoginPage({ admin = false }) {
         <Card className="w-full">
           <PageTitle
             title={admin ? "Admin login" : "Phone login"}
-            subtitle={admin ? "Platform console. Super admin numbers only." : "OTP, then a secure session cookie. No password."}
+            subtitle={
+              admin
+                ? "Email and password. Super admin accounts only."
+                : "OTP, then a secure session cookie. No password."
+            }
           />
           <Alert>{error}</Alert>
           {notAdmin ? <Alert>This number is not a platform admin.</Alert> : null}
-          {!otpSent ? (
+          {admin ? (
+            <form className="space-y-4" onSubmit={adminForm.handleSubmit(onAdmin)}>
+              <Field label="Email" error={adminForm.formState.errors.email?.message}>
+                <input className={inputClass} type="email" autoComplete="username" {...adminForm.register("email")} />
+              </Field>
+              <Field label="Password" error={adminForm.formState.errors.password?.message}>
+                <input className={inputClass} type="password" autoComplete="current-password" {...adminForm.register("password")} />
+              </Field>
+              <Button disabled={status === "loading"} className="w-full">
+                {status === "loading" ? "Signing in…" : "Sign in"}
+              </Button>
+            </form>
+          ) : !otpSent ? (
             <form className="space-y-4" onSubmit={phoneForm.handleSubmit(onPhone)}>
               <Field label="10-digit phone" error={phoneForm.formState.errors.phone?.message}>
                 <input className={inputClass} inputMode="numeric" maxLength={10} {...phoneForm.register("phone")} />
@@ -84,9 +125,11 @@ export default function LoginPage({ admin = false }) {
               <Button disabled={status === "loading"} className="w-full">Verify</Button>
             </form>
           )}
-          <p className="mt-4 text-center text-sm text-muted">
-            Shop owner? <Link className="text-purple" to="/merchant/onboard">Onboard here</Link>
-          </p>
+          {admin ? null : (
+            <p className="mt-4 text-center text-sm text-muted">
+              Shop owner? <Link className="text-purple" to="/merchant/onboard">Onboard here</Link>
+            </p>
+          )}
         </Card>
       </div>
     </div>

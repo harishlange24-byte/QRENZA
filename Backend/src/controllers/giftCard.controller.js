@@ -1,8 +1,12 @@
 import crypto from "node:crypto";
+import mongoose from "mongoose";
 import GiftCard from "../models/giftCard.model.js";
+import User from "../models/user.model.js";
 import StoreVisit from "../models/storeVisit.model.js";
+import LoyaltyProgram from "../models/loyaltyProgram.model.js";
 import Reward from "../models/reward.model.js";
 import {resolveMerchant, findOwnedStore, findPublicStore} from "../utils/access.js";
+import {stampCustomer} from "./loyalty.controller.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -57,6 +61,7 @@ const giftCardView = (card)=>{
         value:card.value,
         freeItemName:card.freeItemName,
         minOrderValue:card.minOrderValue,
+        customerPhone:card.customerPhone || "",
         source:card.source,
         status:card.status,
         issuedAt:card.issuedAt,
@@ -180,6 +185,21 @@ const recordVisit = async(req,res)=>{
             }
         }
 
+        // A shop that counts a visit as a stamp hands one out right here, so the
+        // scan itself moves the card. Per purchase shops stay on the counter.
+        let stamp = null;
+
+        if(!alreadyScanned){
+            const program = await LoyaltyProgram.findOne({
+                store:store._id,
+                isActive:true
+            });
+
+            if(program?.stampRule === "ONE_PER_VISIT"){
+                stamp = await stampCustomer(store,req.user,{referenceType:"VISIT"});
+            }
+        }
+
         const totalVisits = await StoreVisit.countDocuments({
             store:store._id,
             user:req.user._id
@@ -190,12 +210,21 @@ const recordVisit = async(req,res)=>{
 
         return res.status(200).json({
             success:true,
-            message:card ? "You earned a gift card" : "Visit recorded",
+            message:stamp?.claim
+                ? "Stamp added and a reward unlocked"
+                : (card ? "You earned a gift card" : "Visit recorded"),
             data:{
                 totalVisits,
                 interval,
                 untilNextCard:interval - (totalVisits % interval),
-                giftCard:card ? giftCardView(card) : null
+                giftCard:card ? giftCardView(card) : null,
+                stamped:Boolean(stamp),
+                rewardEarned:Boolean(stamp?.rewardEarned),
+                stamps:stamp ? stamp.card.stamps : null,
+                stampsRequired:stamp ? stamp.program.stampsRequired : null,
+                totalStampsEarned:stamp ? stamp.card.totalStampsEarned : null,
+                totalRewardsEarned:stamp ? stamp.card.totalRewardsEarned : null,
+                rewardCode:stamp?.claim ? stamp.claim.code : ""
             }
         })
     }catch(error){
@@ -309,10 +338,12 @@ const createGiftCard = async(req,res)=>{
 
         const customerPhone = String(phone || "").trim();
 
-        if(!/^[6-9]\d{9}$/.test(customerPhone)){
+        // The phone is optional. Without it the card is a shop wide offer that
+        // any customer can pick up at the counter, which is how most events run.
+        if(customerPhone && !/^[6-9]\d{9}$/.test(customerPhone)){
             return res.status(400).json({
                 success:false,
-                message:"Enter a valid 10-digit customer phone number"
+                message:"Enter a valid 10-digit customer phone number or leave it blank"
             })
         }
 
@@ -351,9 +382,15 @@ const createGiftCard = async(req,res)=>{
 
         const days = Number(validityDays) > 0 ? Math.floor(Number(validityDays)) : CARD_VALIDITY_DAYS;
 
+        // When a phone is given the card is also tied to that account so it
+        // lands on the customer's own wallet, not just the shop list.
+        const owner = customerPhone
+            ? await User.findOne({phone:customerPhone}).select("_id")
+            : null;
+
         const card = await GiftCard.create({
             store:store._id,
-            user:null,
+            user:owner?._id || null,
             customerPhone,
             code:await makeUniqueGiftCardCode(),
             title:title.trim(),
@@ -425,11 +462,59 @@ const resolveGiftCard = async(storeId, rawCode, subtotal)=>{
     return {card,discount:Math.min(raw,subtotal),error:null};
 }
 
+// Pull a card back off the wall. The customer simply stops seeing it.
+const deleteGiftCard = async(req,res)=>{
+    try{
+        const {giftCardId} = req.params;
+
+        if(!mongoose.isValidObjectId(giftCardId)){
+            return res.status(400).json({
+                success:false,
+                message:"Invalid gift card id"
+            })
+        }
+
+        const merchant = await resolveMerchant(req.user);
+        const store = await findOwnedStore(merchant,req.params.storeId);
+
+        if(!store){
+            return res.status(404).json({
+                success:false,
+                message:"Store not found"
+            })
+        }
+
+        const card = await GiftCard.findOneAndDelete({
+            _id:giftCardId,
+            store:store._id
+        });
+
+        if(!card){
+            return res.status(404).json({
+                success:false,
+                message:"Gift card not found"
+            })
+        }
+
+        return res.status(200).json({
+            success:true,
+            message:"Gift card deleted successfully"
+        })
+    }catch(error){
+        console.error("deleteGiftCard error : ",error);
+        return res.status(500).json({
+            success:false,
+            message:"Unable to delete gift card"
+        })
+    }
+}
+
 export {
     recordVisit,
     getMyGiftCards,
     listStoreGiftCards,
     createGiftCard,
+    deleteGiftCard,
     resolveGiftCard,
     giftCardView
 };

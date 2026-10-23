@@ -31,7 +31,7 @@ export default function CartPage() {
   // Logged in customers can tap one of their own cards instead of typing a code.
   useEffect(() => {
     getMyGiftCards(code)
-      .then(({ data }) => setCards((data.giftCards || []).filter((c) => c.status === "ACTIVE")))
+      .then(({ data }) => setCards((data.data?.giftCards || []).filter((c) => c.status === "ACTIVE")))
       .catch(() => setCards([]));
   }, [code]);
 
@@ -49,7 +49,7 @@ export default function CartPage() {
         giftCardCode: giftCode.trim()
       });
       sessionStorage.setItem(`qrenzaOrderPhone_${code}`, values.customerPhone);
-      sessionStorage.setItem(`qrenzaOrderId_${code}`, data.order.id);
+      sessionStorage.setItem(`qrenzaOrderId_${code}`, data.data?.order?.id || "");
       cart.clear();
       navigate(`/s/${code}/orders`);
     } catch (e) {

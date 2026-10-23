@@ -8,6 +8,12 @@ export const otpSchema = z.object({
   otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits")
 });
 
+// The super admin console is the only email + password screen.
+export const adminLoginSchema = z.object({
+  email: z.string().email("Enter a valid email"),
+  password: z.string().min(6, "Password must be at least 6 characters")
+});
+
 export const merchantSchema = z.object({
   businessName: z.string().min(2).max(100),
   businessType: z.enum([
@@ -33,24 +39,13 @@ export const storeSchema = z.object({
   geofenceRadius: z.coerce.number().min(20).max(500).default(100)
 });
 
-export const categorySchema = z.object({
+// The menu desk adds a category and its first item in one shot, so the
+// category name travels with the item instead of a raw category id.
+export const menuEntrySchema = z.object({
+  category: z.string().min(1).max(100),
   name: z.string().min(1).max(100),
-  description: z.string().optional()
-});
-
-export const itemSchema = z.object({
-  name: z.string().min(1).max(100),
-  description: z.string().optional(),
   price: z.coerce.number().min(0),
-  category: z.string().min(1),
-  isVeg: z.boolean().default(true),
-  isAvailable: z.boolean().default(true),
-  image: z.string().optional()
-});
-
-export const stampSchema = z.object({
-  phone: z.string().regex(/^[6-9]\d{9}$/),
-  note: z.string().optional()
+  isVeg: z.boolean().default(true)
 });
 
 export const feedbackSchema = z.object({
@@ -59,20 +54,13 @@ export const feedbackSchema = z.object({
   comment: z.string().max(2000).optional()
 });
 
-export const campaignSchema = z.object({
-  name: z.string().min(2).max(150),
-  segment: z.enum(["ALL_CUSTOMERS", "INACTIVE_CUSTOMERS", "FREQUENT_CUSTOMERS", "REWARD_HOLDERS"]),
-  inactiveDays: z.coerce.number().min(0).default(14),
-  messageTemplate: z.string().min(5),
-  channel: z.enum(["WHATSAPP", "IN_APP"]).default("WHATSAPP")
-});
-
+// A reward is just what it gives and how many the shop will hand out.
 export const rewardSchema = z.object({
   name: z.string().min(2).max(150),
   type: z.enum(["DISCOUNT", "FREE_ITEM", "COUPON", "CUSTOM"]),
   discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),
   value: z.coerce.number().min(0).default(0),
-  probability: z.coerce.number().min(0).max(100),
+  quantity: z.union([z.coerce.number().min(1), z.literal("")]).optional(),
   validityDays: z.coerce.number().min(1).default(30)
 });
 
@@ -88,8 +76,9 @@ export const orderSchema = z.object({
   note: z.string().max(300).optional()
 });
 
+// The phone is optional, a blank one means the card is a shop wide offer.
 export const giftCardSchema = z.object({
-  phone: z.string().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit number"),
+  phone: z.union([z.string().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit number"), z.literal("")]).optional(),
   title: z.string().min(2).max(150),
   type: z.enum(["DISCOUNT", "FREE_ITEM"]),
   discountType: z.enum(["PERCENTAGE", "FIXED"]).optional(),

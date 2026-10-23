@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { createStore, getStoreQr, listStores } from "../../api/store";
+import { toast } from "react-toastify";
+import { createStore, deleteStore, getStoreQr, listStores, updateStore } from "../../api/store";
 import { getErrorMessage } from "../../api/client";
 import { getCurrentPosition } from "../../lib/geo";
 import { hasMapsKey } from "../../lib/maps";
@@ -12,13 +13,25 @@ import MapPicker from "../../components/MapPicker";
 import { Alert, Button, Card, Empty, Field, inputClass, PageTitle } from "../../components/ui";
 
 export default function StoresPage() {
-  const { upsertStore, stores: cached } = useMerchantStore();
+  const { upsertStore, removeStore, stores: cached } = useMerchantStore();
   const [stores, setStores] = useState(cached);
   const [qr, setQr] = useState(null);
+  const [editing, setEditing] = useState("");
   const [error, setError] = useState("");
+  const emptyStore = {
+    name: "",
+    phone: "",
+    line1: "",
+    city: "",
+    state: "",
+    pincode: "",
+    latitude: "",
+    longitude: "",
+    geofenceRadius: 100
+  };
   const form = useForm({
     resolver: zodResolver(storeSchema),
-    defaultValues: { geofenceRadius: 100 }
+    defaultValues: emptyStore
   });
 
   useEffect(() => {
@@ -42,37 +55,97 @@ export default function StoresPage() {
     }
   }
 
+  const payloadOf = (values) => ({
+    name: values.name,
+    phone: values.phone,
+    latitude: values.latitude,
+    longitude: values.longitude,
+    geofenceRadius: values.geofenceRadius,
+    address: {
+      line1: values.line1,
+      city: values.city,
+      state: values.state,
+      pincode: values.pincode,
+      country: "India"
+    }
+  });
+
   async function onSubmit(values) {
     try {
-      const { data } = await createStore({
-        name: values.name,
-        phone: values.phone,
-        latitude: values.latitude,
-        longitude: values.longitude,
-        geofenceRadius: values.geofenceRadius,
-        address: {
-          line1: values.line1,
-          city: values.city,
-          state: values.state,
-          pincode: values.pincode,
-          country: "India"
+      if (editing) {
+        const { data } = await updateStore(editing, payloadOf(values));
+        if (data.store) {
+          upsertStore(data.store);
+          setStores((prev) => prev.map((s) => ((s.id || s._id) === data.store.id ? { ...s, ...data.store } : s)));
         }
-      });
+        setEditing("");
+        form.reset(emptyStore);
+        setError("");
+        toast.success("Store updated");
+        return;
+      }
+
+      const { data } = await createStore(payloadOf(values));
       if (data.store) {
         upsertStore(data.store);
         setStores((prev) => [data.store, ...prev.filter((s) => (s.id || s._id) !== data.store.id)]);
       }
-      form.reset({ geofenceRadius: 100 });
+      form.reset(emptyStore);
       setError("");
+      toast.success("Store created");
     } catch (e) {
       setError(getErrorMessage(e));
+      toast.error(getErrorMessage(e));
+    }
+  }
+
+  // Loads the store back into the same form so editing never needs a new page.
+  function startEdit(store) {
+    setEditing(store.id || store._id);
+    setQr(null);
+    setError("");
+    form.reset({
+      name: store.name || "",
+      phone: store.phone || "",
+      line1: store.address?.line1 || "",
+      city: store.address?.city || "",
+      state: store.address?.state || "",
+      pincode: store.address?.pincode || "",
+      latitude: store.location?.coordinates?.[1] ?? "",
+      longitude: store.location?.coordinates?.[0] ?? "",
+      geofenceRadius: store.geofenceRadius ?? 100
+    });
+  }
+
+  function cancelEdit() {
+    setEditing("");
+    form.reset(emptyStore);
+    setError("");
+  }
+
+  async function remove(store) {
+    const id = store.id || store._id;
+    if (!window.confirm(`Delete "${store.name}"? Its menu, tables and stamp programme go with it.`)) return;
+
+    try {
+      await deleteStore(id);
+      setStores((prev) => prev.filter((s) => (s.id || s._id) !== id));
+      removeStore(id);
+      if (editing === id) cancelEdit();
+      toast.success("Store deleted");
+    } catch (e) {
+      setError(getErrorMessage(e));
+      toast.error(getErrorMessage(e));
     }
   }
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <div>
-        <PageTitle title="Stores" subtitle="Name, phone, GPS, and a 20–500m geofence." />
+        <PageTitle
+          title="Stores"
+          subtitle={editing ? "Editing an existing store" : "Name, phone, GPS, and a 20–500m geofence."}
+        />
         <Alert>{error}</Alert>
         {error.toLowerCase().includes("location limit") ? (
           <Link to="/merchant/billing" className="text-sm text-purple">Upgrade to add another location →</Link>
@@ -120,27 +193,41 @@ export default function StoresPage() {
                 }}
               />
             ) : null}
-            <Button className="w-full">Create store</Button>
+            <div className="flex gap-2">
+              <Button className="flex-1">{editing ? "Save changes" : "Create store"}</Button>
+              {editing ? (
+                <Button type="button" variant="ghost" onClick={cancelEdit}>Cancel</Button>
+              ) : null}
+            </div>
           </form>
         </Card>
       </div>
       <div className="space-y-3">
         {!stores.length ? <Empty title="No store yet" text="Create one on the left. QR appears after the store exists." /> : null}
-        {stores.map((s) => (
-          <Card key={s.id || s._id}>
-            <p className="font-semibold text-ink">{s.name}</p>
-            <p className="text-xs text-muted">{s.slug} · {s.status}</p>
-            <Button className="mt-3" variant="accent" onClick={async () => {
-              upsertStore(s);
-              try {
-                const { data } = await getStoreQr(s.id || s._id);
-                setQr(data.qr);
-              } catch (e) {
-                setError(getErrorMessage(e));
-              }
-            }}>Use store + QR</Button>
-          </Card>
-        ))}
+        {stores.map((s) => {
+          const id = s.id || s._id;
+          return (
+            <Card key={id} className={editing === id ? "ring-1 ring-purple" : ""}>
+              <p className="font-semibold text-ink">{s.name}</p>
+              <p className="text-xs text-muted">{s.slug} · {s.status}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="accent" onClick={async () => {
+                  upsertStore(s);
+                  try {
+                    const { data } = await getStoreQr(id);
+                    setQr(data.qr);
+                    toast.success("QR ready");
+                  } catch (e) {
+                    setError(getErrorMessage(e));
+                    toast.error(getErrorMessage(e));
+                  }
+                }}>Use store + QR</Button>
+                <Button variant="ghost" onClick={() => startEdit(s)}>Edit</Button>
+                <Button variant="ghost" onClick={() => remove(s)}>Delete</Button>
+              </div>
+            </Card>
+          );
+        })}
         {qr ? (
           <Card>
             <p className="mb-2 text-sm text-purple">{qr.targetUrl}</p>

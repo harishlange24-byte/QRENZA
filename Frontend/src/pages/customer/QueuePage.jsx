@@ -18,7 +18,7 @@ export default function QueuePage() {
   async function load() {
     try {
       const { data } = await getMyQueue(code, phone);
-      setEntry(data.entry || data);
+      setEntry(data.data?.entry || null);
     } catch (e) {
       setError(getErrorMessage(e));
     }
@@ -36,7 +36,7 @@ export default function QueuePage() {
       const { data } = await joinQueue(code, values);
       setPhone(values.customerPhone);
       sessionStorage.setItem(`qrenzaQueuePhone_${code}`, values.customerPhone);
-      setEntry(data.entry || data);
+      setEntry(data.data?.entry || null);
       setError("");
     } catch (e) {
       setError(getErrorMessage(e));

@@ -1,5 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { getMe, logout, sendOtp, verifyOtp } from "../api/auth";
+import { adminLogin, getMe, logout, sendOtp, verifyOtp } from "../api/auth";
 import { getErrorMessage } from "../api/client";
 
 export const requestOtp = createAsyncThunk("auth/sendOtp", async (phone, { rejectWithValue }) => {
@@ -14,6 +14,15 @@ export const requestOtp = createAsyncThunk("auth/sendOtp", async (phone, { rejec
 export const confirmOtp = createAsyncThunk("auth/verifyOtp", async ({ phone, otp }, { rejectWithValue }) => {
   try {
     const { data } = await verifyOtp(phone, otp);
+    return data.user;
+  } catch (error) {
+    return rejectWithValue(getErrorMessage(error));
+  }
+});
+
+export const adminSignIn = createAsyncThunk("auth/adminLogin", async ({ email, password }, { rejectWithValue }) => {
+  try {
+    const { data } = await adminLogin(email, password);
     return data.user;
   } catch (error) {
     return rejectWithValue(getErrorMessage(error));
@@ -82,6 +91,19 @@ const authSlice = createSlice({
         state.ready = true;
       })
       .addCase(confirmOtp.rejected, (state, action) => {
+        state.status = "idle";
+        state.error = action.payload;
+      })
+      .addCase(adminSignIn.pending, (state) => {
+        state.status = "loading";
+        state.error = "";
+      })
+      .addCase(adminSignIn.fulfilled, (state, action) => {
+        state.status = "idle";
+        state.user = action.payload;
+        state.ready = true;
+      })
+      .addCase(adminSignIn.rejected, (state, action) => {
         state.status = "idle";
         state.error = action.payload;
       })

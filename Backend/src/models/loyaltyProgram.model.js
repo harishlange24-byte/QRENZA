@@ -19,6 +19,13 @@ const loyaltyProgramSchema = new mongoose.Schema(
             min:1,
             default:10,
         },
+        // Plain text the counter reads out. "10 stamps and you get a free chai"
+        // keeps the reward visible without opening the rewards screen.
+        rewardText:{
+            type:String,
+            trim:true,
+            default:"",
+        },
         stampRule:{
             type:String,
             enum:["ONE_PER_VISIT","ONE_PER_PURCHASE"],

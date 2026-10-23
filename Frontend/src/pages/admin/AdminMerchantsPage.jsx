@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { listAdminMerchants, updateAdminMerchant } from "../../api/admin";
+import { toast } from "react-toastify";
+import { deleteAdminMerchant, listAdminMerchants, updateAdminMerchant } from "../../api/admin";
 import { getErrorMessage } from "../../api/client";
 import { Alert, Button, Card, inputClass, PageTitle } from "../../components/ui";
 
@@ -35,9 +36,28 @@ export default function AdminMerchantsPage() {
     setError(""); setBusy(id);
     try {
       await updateAdminMerchant(id, { status });
+      toast.success(status === "ACTIVE" ? "Merchant activated" : "Merchant suspended");
       await load();
     } catch (e) {
       setError(getErrorMessage(e));
+      toast.error(getErrorMessage(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  // Wipes the business, every store under it and the shop catalogue.
+  async function remove(row) {
+    if (!window.confirm(`Delete "${row.businessName}" and all ${row.storeCount} store(s)? This cannot be undone.`)) return;
+
+    setError(""); setBusy(row._id);
+    try {
+      await deleteAdminMerchant(row._id);
+      toast.success("Merchant deleted");
+      await load();
+    } catch (e) {
+      setError(getErrorMessage(e));
+      toast.error(getErrorMessage(e));
     } finally {
       setBusy("");
     }
@@ -109,6 +129,14 @@ export default function AdminMerchantsPage() {
                           onClick={() => setStatus(row._id, row.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE")}
                         >
                           {row.status === "ACTIVE" ? "Suspend" : "Activate"}
+                        </button>
+                        <Link to={`/admin/merchants/${row._id}`} className="text-purple">Edit</Link>
+                        <button
+                          className="text-muted disabled:opacity-50"
+                          disabled={busy === row._id}
+                          onClick={() => remove(row)}
+                        >
+                          Delete
                         </button>
                       </div>
                     </td>

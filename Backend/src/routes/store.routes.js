@@ -5,6 +5,9 @@ import {requireFeature} from "../middleware/feature.middleware.js";
 import {
     createStore,
     listStores,
+    updateStore,
+    deleteStore,
+    listPublicStores,
     getPublicStoreByCode,
     getPublicTable,
     getStoreQR
@@ -14,7 +17,9 @@ import {
     getMerchantMenu,
     createCategory,
     createItem,
-    updateItem
+    updateItem,
+    deleteItem,
+    deleteCategory
 } from "../controllers/menu.controller.js";
 import {
     getMyLoyalty,
@@ -25,6 +30,7 @@ import {
     getMyRewards,
     listRewards,
     createReward,
+    deleteReward,
     redeemClaim
 } from "../controllers/loyalty.controller.js";
 import {
@@ -47,6 +53,7 @@ import {
     getCrmCustomers,
     getCustomerProfile,
     getAnalytics,
+    getDashboardSummary,
     listCampaigns,
     createCampaign
 } from "../controllers/crm.controller.js";
@@ -62,7 +69,8 @@ import {
     recordVisit,
     getMyGiftCards,
     listStoreGiftCards,
-    createGiftCard
+    createGiftCard,
+    deleteGiftCard
 } from "../controllers/giftCard.controller.js";
 import {
     listSupplyCatalog,
@@ -75,6 +83,10 @@ const router  = express.Router();
 
 // Customer routes are keyed by the public store code and stay in front so
 // "/public/..." is never swallowed by the "/:storeId/..." routes below.
+//
+// The bare list is the customer home screen. It stays open to guests, a session
+// simply adds the "what I collected there" block.
+router.get("/public",optionalProtect,listPublicStores);
 router.get("/public/:code",getPublicStoreByCode);
 router.get("/public/:code/t/:tableNumber",getPublicTable);
 router.get("/public/:code/menu",getPublicMenu);
@@ -100,6 +112,8 @@ router.get("/public/:code/gift-cards",protect,getMyGiftCards);
 
 router.post("/",protect,authorize("MERCHANT"),createStore);
 router.get("/",protect,authorize("MERCHANT"),listStores);
+router.patch("/:storeId",protect,authorize("MERCHANT"),updateStore);
+router.delete("/:storeId",protect,authorize("MERCHANT"),deleteStore);
 router.get("/:storeId/qr",protect,authorize("MERCHANT"),getStoreQR);
 
 // Physical supplies (QR standee and friends) are bought by the merchant, so
@@ -111,8 +125,10 @@ router.post("/supplies/orders/:orderId/cancel",protect,authorize("MERCHANT"),can
 
 router.get("/:storeId/menu",protect,authorize("MERCHANT","STAFF"),requireFeature("AI_MENU"),getMerchantMenu);
 router.post("/:storeId/menu/categories",protect,authorize("MERCHANT","STAFF"),requireFeature("AI_MENU"),createCategory);
+router.delete("/:storeId/menu/categories/:categoryId",protect,authorize("MERCHANT","STAFF"),requireFeature("AI_MENU"),deleteCategory);
 router.post("/:storeId/menu/items",protect,authorize("MERCHANT","STAFF"),requireFeature("AI_MENU"),createItem);
 router.patch("/:storeId/menu/items/:itemId",protect,authorize("MERCHANT","STAFF"),requireFeature("AI_MENU"),updateItem);
+router.delete("/:storeId/menu/items/:itemId",protect,authorize("MERCHANT","STAFF"),requireFeature("AI_MENU"),deleteItem);
 
 router.get("/:storeId/loyalty",protect,authorize("MERCHANT","STAFF"),requireFeature("DIGITAL_STAMPS"),getLoyaltyProgram);
 router.put("/:storeId/loyalty",protect,authorize("MERCHANT","STAFF"),requireFeature("DIGITAL_STAMPS"),upsertLoyaltyProgram);
@@ -120,6 +136,7 @@ router.post("/:storeId/loyalty/stamps",protect,authorize("MERCHANT","STAFF"),req
 
 router.get("/:storeId/rewards",protect,authorize("MERCHANT","STAFF"),requireFeature("DIGITAL_STAMPS"),listRewards);
 router.post("/:storeId/rewards",protect,authorize("MERCHANT","STAFF"),requireFeature("DIGITAL_STAMPS"),createReward);
+router.delete("/:storeId/rewards/:rewardId",protect,authorize("MERCHANT","STAFF"),requireFeature("DIGITAL_STAMPS"),deleteReward);
 router.post("/:storeId/rewards/redeem",protect,authorize("MERCHANT","STAFF"),requireFeature("DIGITAL_STAMPS"),redeemClaim);
 
 router.get("/:storeId/queue",protect,authorize("MERCHANT","STAFF"),requireFeature("QR_QUEUE"),getMerchantQueue);
@@ -136,6 +153,8 @@ router.get("/:storeId/crm/customers",protect,authorize("MERCHANT","STAFF"),requi
 router.get("/:storeId/crm/customers/:userId",protect,authorize("MERCHANT","STAFF"),requireFeature("CUSTOMER_CRM"),getCustomerProfile);
 
 router.get("/:storeId/analytics",protect,authorize("MERCHANT","STAFF"),requireFeature("ANALYTICS"),getAnalytics);
+// The home screen is not gated, every merchant needs to see their own numbers.
+router.get("/:storeId/dashboard",protect,authorize("MERCHANT","STAFF"),getDashboardSummary);
 router.get("/:storeId/campaigns",protect,authorize("MERCHANT","STAFF"),requireFeature("WHATSAPP_CAMPAIGNS"),listCampaigns);
 router.post("/:storeId/campaigns",protect,authorize("MERCHANT","STAFF"),requireFeature("WHATSAPP_CAMPAIGNS"),createCampaign);
 
@@ -147,5 +166,6 @@ router.patch("/:storeId/orders/:orderId",protect,authorize("MERCHANT","STAFF"),r
 
 router.get("/:storeId/gift-cards",protect,authorize("MERCHANT","STAFF"),requireFeature("DIGITAL_STAMPS"),listStoreGiftCards);
 router.post("/:storeId/gift-cards",protect,authorize("MERCHANT","STAFF"),requireFeature("DIGITAL_STAMPS"),createGiftCard);
+router.delete("/:storeId/gift-cards/:giftCardId",protect,authorize("MERCHANT","STAFF"),requireFeature("DIGITAL_STAMPS"),deleteGiftCard);
 
 export default router;

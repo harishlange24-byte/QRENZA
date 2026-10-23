@@ -25,10 +25,10 @@ export default function GiftCardsPage() {
   useEffect(() => {
     // Opening the store counts as a visit, which is how the streak grows.
     recordVisit(code)
-      .then(({ data }) => setProgress(data))
+      .then(({ data }) => setProgress(data.data || null))
       .catch((e) => setError(getErrorMessage(e)));
     getMyGiftCards(code)
-      .then(({ data }) => setCards(data.giftCards || []))
+      .then(({ data }) => setCards(data.data?.giftCards || []))
       .catch((e) => setError(getErrorMessage(e)));
   }, [code]);
 

@@ -4,22 +4,19 @@ export function getCrmStats(storeId) {
   return client.get(`/store/${storeId}/crm`);
 }
 
-export function getCrmCustomers(storeId) {
-  return client.get(`/store/${storeId}/crm/customers`);
+export function getCrmCustomers(storeId, search) {
+  return client.get(`/store/${storeId}/crm/customers`, { params: search ? { search } : {} });
 }
 
 export function getCustomerProfile(storeId, userId) {
   return client.get(`/store/${storeId}/crm/customers/${userId}`);
 }
 
-export function getAnalytics(storeId) {
-  return client.get(`/store/${storeId}/analytics`);
+// One call fills the home screen: the number boxes plus a week of trend.
+export function getDashboard(storeId) {
+  return client.get(`/store/${storeId}/dashboard`);
 }
 
-export function listCampaigns(storeId) {
-  return client.get(`/store/${storeId}/campaigns`);
-}
-
-export function createCampaign(storeId, payload) {
-  return client.post(`/store/${storeId}/campaigns`, payload);
+export function getAnalytics(storeId, days) {
+  return client.get(`/store/${storeId}/analytics`, { params: days ? { days } : {} });
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { listAdminStores, updateAdminStore } from "../../api/admin";
+import { toast } from "react-toastify";
+import { deleteAdminStore, listAdminStores, updateAdminStore } from "../../api/admin";
 import { getErrorMessage } from "../../api/client";
 import { Alert, Button, Card, inputClass, PageTitle } from "../../components/ui";
 
@@ -34,9 +35,44 @@ export default function AdminStoresPage() {
     setError(""); setBusy(id);
     try {
       await updateAdminStore(id, { status });
+      toast.success(status === "ACTIVE" ? "Store activated" : "Store suspended");
       await load();
     } catch (e) {
       setError(getErrorMessage(e));
+      toast.error(getErrorMessage(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function rename(row) {
+    const name = window.prompt("Store name", row.name);
+    if (name === null || !name.trim() || name.trim() === row.name) return;
+
+    setError(""); setBusy(row._id);
+    try {
+      await updateAdminStore(row._id, { name: name.trim() });
+      toast.success("Store renamed");
+      await load();
+    } catch (e) {
+      setError(getErrorMessage(e));
+      toast.error(getErrorMessage(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function remove(row) {
+    if (!window.confirm(`Delete "${row.name}"? Its menu, tables and stamp programme go with it.`)) return;
+
+    setError(""); setBusy(row._id);
+    try {
+      await deleteAdminStore(row._id);
+      toast.success("Store deleted");
+      await load();
+    } catch (e) {
+      setError(getErrorMessage(e));
+      toast.error(getErrorMessage(e));
     } finally {
       setBusy("");
     }
@@ -96,13 +132,29 @@ export default function AdminStoresPage() {
                     <td className="py-2 text-muted">{row.status}</td>
                     <td className="py-2 text-muted">{new Date(row.createdAt).toDateString()}</td>
                     <td className="py-2">
-                      <button
-                        className="text-muted disabled:opacity-50"
-                        disabled={busy === row._id}
-                        onClick={() => setStatus(row._id, row.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE")}
-                      >
-                        {row.status === "ACTIVE" ? "Suspend" : "Activate"}
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          className="text-muted disabled:opacity-50"
+                          disabled={busy === row._id}
+                          onClick={() => setStatus(row._id, row.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE")}
+                        >
+                          {row.status === "ACTIVE" ? "Suspend" : "Activate"}
+                        </button>
+                        <button
+                          className="text-purple disabled:opacity-50"
+                          disabled={busy === row._id}
+                          onClick={() => rename(row)}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          className="text-muted disabled:opacity-50"
+                          disabled={busy === row._id}
+                          onClick={() => remove(row)}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

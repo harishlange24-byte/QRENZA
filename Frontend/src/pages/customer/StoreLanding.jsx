@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { getPublicStore } from "../../api/store";
 import { recordVisit } from "../../api/giftCard";
+import { getMyLoyalty } from "../../api/loyalty";
+import { getMyOrders } from "../../api/order";
 import { getErrorMessage } from "../../api/client";
 import { distanceMeters, getCurrentPosition } from "../../lib/geo";
 import { hasMapsKey } from "../../lib/maps";
@@ -9,13 +12,27 @@ import { useVisit } from "../../context/VisitContext";
 import ShopMap from "../../components/ShopMap";
 import { Alert, Button, Card } from "../../components/ui";
 
+const ORDER_LINE = {
+  PLACED: "Sent to the kitchen",
+  ACCEPTED: "Kitchen accepted it",
+  PREPARING: "Being prepared",
+  READY: "Ready to collect",
+  SERVED: "Served",
+  CANCELLED: "Cancelled"
+};
+
 export default function StoreLanding() {
   const { code, tableNumber } = useParams();
   const { visit, setVisit } = useVisit();
+  const user = useSelector((s) => s.auth.user);
+  const ready = useSelector((s) => s.auth.ready);
   const [store, setStore] = useState(null);
   const [error, setError] = useState("");
   const [gps, setGps] = useState("idle");
   const [coords, setCoords] = useState(visit.coords);
+  const [progress, setProgress] = useState(null);
+  const [loyalty, setLoyalty] = useState(null);
+  const [order, setOrder] = useState(null);
 
   useEffect(() => {
     let live = true;
@@ -31,11 +48,37 @@ export default function StoreLanding() {
     };
   }, [code, tableNumber, setVisit]);
 
-  // Every scan counts as a visit for the gift card streak. Guests are not
-  // logged in yet, so a 401 here is simply ignored.
+  // The scan itself is the visit: it grows the gift card streak and, on shops
+  // that stamp per visit, it moves the stamp card as well. Guests have no
+  // session yet, so the whole block waits for the session check.
   useEffect(() => {
-    recordVisit(code).catch(() => {});
-  }, [code]);
+    if (!ready) return;
+
+    if (!user) {
+      setProgress(null);
+      setLoyalty(null);
+      setOrder(null);
+      return;
+    }
+
+    let live = true;
+    const keep = (setter) => ({ data }) => {
+      if (live) setter(data.data || null);
+    };
+    const skip = () => {};
+
+    recordVisit(code).then(keep(setProgress)).catch(skip);
+    getMyLoyalty(code).then(keep(setLoyalty)).catch(skip);
+    getMyOrders(code)
+      .then(({ data }) => {
+        if (live) setOrder(data.data?.orders?.[0] || null);
+      })
+      .catch(skip);
+
+    return () => {
+      live = false;
+    };
+  }, [code, ready, user]);
 
   async function allowGps() {
     try {
@@ -60,6 +103,11 @@ export default function StoreLanding() {
   const distance = shopPoint && coords ? distanceMeters(coords, shopPoint) : null;
   const inside = distance !== null && distance <= radius;
 
+  const program = loyalty?.program || null;
+  const stamps = loyalty?.card?.stamps || 0;
+  const required = program?.stampsRequired || 10;
+  const left = Math.max(0, required - stamps);
+
   return (
     <div className="space-y-4">
       <div className="rounded-[2rem] border border-line bg-panel p-6">
@@ -67,7 +115,72 @@ export default function StoreLanding() {
         <h1 className="mt-2 text-3xl font-semibold text-ink">{name}</h1>
         <p className="mt-1 text-sm text-muted">{tableNumber ? `Table ${tableNumber}` : store?.name || "Counter QR"}</p>
       </div>
+
       <Alert>{error}</Alert>
+
+      {user ? (
+        <Card className="space-y-3">
+          <p className="text-xs uppercase tracking-[0.2em] text-purple">What you have here</p>
+
+          {program ? (
+            <div className="space-y-2">
+              <p className="text-sm text-ink">
+                Stamps <span className="font-semibold text-purple">{stamps}/{required}</span>
+                {" · "}
+                {left} more stamp{left === 1 ? "" : "s"} for a reward
+              </p>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: required }, (_, i) => (
+                  <span
+                    key={i}
+                    className={`h-1.5 flex-1 rounded-full ${i < stamps ? "bg-purple" : "bg-raised"}`}
+                  />
+                ))}
+              </div>
+              <p className="text-xs text-muted">
+                {loyalty?.card?.totalRewardsEarned || 0} reward
+                {(loyalty?.card?.totalRewardsEarned || 0) === 1 ? "" : "s"} unlocked here ·{" "}
+                {loyalty?.card?.totalStampsEarned || 0} stamps earned
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted">This shop is not running a stamp card.</p>
+          )}
+
+          {progress ? (
+            <p className="text-xs text-muted">
+              Visited on {progress.totalVisits} day{progress.totalVisits === 1 ? "" : "s"} ·{" "}
+              {progress.untilNextCard} more for a gift card
+            </p>
+          ) : null}
+
+          {progress?.rewardEarned ? (
+            <p className="rounded-2xl bg-lavender px-3 py-2 text-sm font-semibold text-ink">
+              That stamp filled your card. A reward is waiting in My rewards.
+            </p>
+          ) : null}
+
+          {progress?.giftCard ? (
+            <p className="rounded-2xl bg-lavender px-3 py-2 text-sm font-semibold text-ink">
+              New gift card unlocked · {progress.giftCard.code}
+            </p>
+          ) : null}
+
+          {order ? (
+            <p className="text-sm text-ink">
+              Last order: <span className="font-semibold text-purple">{ORDER_LINE[order.status] || order.status}</span>
+              {" · "}₹{order.total}
+            </p>
+          ) : null}
+
+          <div className="grid grid-cols-3 gap-2">
+            <Link to={`/s/${code}/loyalty`}><Button variant="ghost" className="w-full">Stamps</Button></Link>
+            <Link to={`/s/${code}/rewards`}><Button variant="ghost" className="w-full">Rewards</Button></Link>
+            <Link to={`/s/${code}/orders`}><Button variant="ghost" className="w-full">Orders</Button></Link>
+          </div>
+        </Card>
+      ) : null}
+
       <Card className="space-y-3">
         <p className="text-sm text-muted">Confirm you are at this shop. Location is asked once and checked on the server.</p>
         <Button onClick={allowGps} className="w-full">
@@ -94,7 +207,9 @@ export default function StoreLanding() {
           </>
         ) : null}
         <Link to={`/s/${code}/gift-cards`}><Button variant="ghost" className="w-full">Gift cards</Button></Link>
-        <Link to="/login" state={{ from: `/s/${code}` }}><Button variant="ghost" className="w-full">Login</Button></Link>
+        {!user ? (
+          <Link to="/login" state={{ from: `/s/${code}` }}><Button variant="ghost" className="w-full">Login</Button></Link>
+        ) : null}
         <Link to={`/s/${code}/loyalty`}><Button variant="ghost" className="w-full">Stamps</Button></Link>
         <Link to={`/s/${code}/queue`}><Button variant="ghost" className="w-full">Queue</Button></Link>
       </div>

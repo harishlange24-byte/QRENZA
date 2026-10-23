@@ -468,10 +468,123 @@ const updateItem = async(req,res)=>{
     }
 }
 
+// Removing an item is a real delete, the merchant can always add it back.
+const deleteItem = async(req,res)=>{
+    try{
+        const {itemId} = req.params;
+
+        if(!mongoose.isValidObjectId(itemId)){
+            return res.status(400).json({
+                success:false,
+                message:"Invalid item id"
+            })
+        }
+
+        const merchant = await resolveMerchant(req.user);
+        const store = await findOwnedStore(merchant, req.params.storeId);
+
+        if(!store){
+            return res.status(404).json({
+                success:false,
+                message:"Store not found"
+            })
+        }
+
+        const item = await menuItemModel.findOneAndDelete({
+            _id:itemId,
+            store:store._id
+        });
+
+        if(!item){
+            return res.status(404).json({
+                success:false,
+                message:"Item not found"
+            })
+        }
+
+        return res.status(200).json({
+            success:true,
+            message:"Item deleted successfully"
+        })
+    }catch(error){
+        console.error("deleteItem error : ",error);
+        return res.status(500).json({
+            success:false,
+            message:"Unable to delete item"
+        })
+    }
+}
+
+// A category takes its items with it, otherwise those items would be left with
+// nothing to show them under.
+const deleteCategory = async(req,res)=>{
+    try{
+        const {categoryId} = req.params;
+
+        if(!mongoose.isValidObjectId(categoryId)){
+            return res.status(400).json({
+                success:false,
+                message:"Invalid category id"
+            })
+        }
+
+        const merchant = await resolveMerchant(req.user);
+        const store = await findOwnedStore(merchant, req.params.storeId);
+
+        if(!store){
+            return res.status(404).json({
+                success:false,
+                message:"Store not found"
+            })
+        }
+
+        const menu = await menuModel.findOne({store:store._id});
+
+        if(!menu){
+            return res.status(404).json({
+                success:false,
+                message:"Menu not found"
+            })
+        }
+
+        const category = await menuCategoryModel.findOneAndDelete({
+            _id:categoryId,
+            menu:menu._id,
+            store:store._id
+        });
+
+        if(!category){
+            return res.status(404).json({
+                success:false,
+                message:"Category not found"
+            })
+        }
+
+        const removed = await menuItemModel.deleteMany({
+            category:category._id,
+            store:store._id
+        });
+
+        return res.status(200).json({
+            success:true,
+            message:"Category deleted successfully",
+            data:{itemsRemoved:removed.deletedCount}
+        })
+    }catch(error){
+        console.error("deleteCategory error : ",error);
+        return res.status(500).json({
+            success:false,
+            message:"Unable to delete category"
+        })
+    }
+}
+
 export {
     getPublicMenu,
     getMerchantMenu,
     createCategory,
     createItem,
-    updateItem
+    updateItem,
+    deleteItem,
+    deleteCategory
 };

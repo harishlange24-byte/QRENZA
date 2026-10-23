@@ -9,6 +9,7 @@ import {
   createCheckout,
   verifyCheckout,
   cancelSubscription,
+  resumeSubscription,
   requestPlanChange,
   requestEnterpriseQuote,
   requestRefund
@@ -145,6 +146,19 @@ export default function BillingPage() {
       const { data } = await cancelSubscription(cancelReason);
       setNotice(data.message);
       setCancelReason("");
+      await load();
+    } catch (e) {
+      setError(getErrorMessage(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function resume() {
+    setError(""); setNotice(""); setBusy("resume");
+    try {
+      const { data } = await resumeSubscription();
+      setNotice(data.message);
       await load();
     } catch (e) {
       setError(getErrorMessage(e));
@@ -306,6 +320,17 @@ export default function BillingPage() {
             />
             <Button variant="ghost" disabled={busy === "cancel"} onClick={cancel}>
               {busy === "cancel" ? "Cancelling…" : "Cancel renewal"}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
+      {access?.hasPlan && access?.cancelAtPeriodEnd ? (
+        <Card className="border-purple">
+          <PageTitle title="Renewal cancelled" subtitle="You can turn automatic renewal back on until the paid period ends." />
+          <div className="flex items-end">
+            <Button disabled={busy === "resume"} onClick={resume}>
+              {busy === "resume" ? "Resuming…" : "Resume renewal"}
             </Button>
           </div>
         </Card>

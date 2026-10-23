@@ -26,7 +26,7 @@ export default function ScratchPage() {
       }
 
       const { data } = await scratchReward(code, coords);
-      setResult(data.reward || data);
+      setResult(data.data?.reward || null);
       setRevealed(true);
       setError("");
     } catch (e) {

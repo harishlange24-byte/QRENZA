@@ -22,7 +22,7 @@ export default function FeedbackPage() {
   async function onSubmit(values) {
     try {
       const { data } = await submitFeedback(code, { ...values, source: "POST_VISIT" });
-      setDone(data.feedback || values);
+      setDone(data.data?.feedback || values);
       setError("");
     } catch (e) {
       setError(getErrorMessage(e));

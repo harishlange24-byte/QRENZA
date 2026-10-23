@@ -25,7 +25,7 @@ app.use(helmet());
 // a space separated list so the LAN phone, localhost and the deployed frontend
 // can all sit side by side. credentials has to stay true, otherwise the browser
 // refuses to send the session cookie on any authenticated call.
-const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:5173 http://127.0.0.1:5173")
+const allowedOrigins = ( "http://localhost:5173 http://127.0.0.1:5173")
     .split(/\s+/)
     .filter(Boolean);
 

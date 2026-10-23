@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 import OtpSession from "../models/otpSession.model.js";
@@ -246,12 +247,96 @@ const verifyOtp = async (req, res) => {
     }
 };
 
+// The platform console is the one screen that does not use OTP. It signs in
+// with an email and a password that only exist for SUPER_ADMIN accounts, so a
+// customer or merchant number can never open it.
+const adminLogin = async (req, res) => {
+    try {
+        const email = String(req.body.email || "").trim().toLowerCase();
+        const password = String(req.body.password || "");
+
+        if (!email || !password) {
+            return res.status(400).json({
+                success: false,
+                message: "Email and password are required"
+            });
+        }
+
+        const user = await User.findOne({
+            email,
+            role: "SUPER_ADMIN"
+        }).select("+passwordHash");
+
+        // An unknown email and a wrong password answer the same way, so the
+        // screen never confirms which admin addresses exist.
+        if (!user || !user.passwordHash) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid email or password"
+            });
+        }
+
+        const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+
+        if (!passwordMatches) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid email or password"
+            });
+        }
+
+        if (!user.isActive) {
+            return res.status(403).json({
+                success: false,
+                message: "Account is inactive"
+            });
+        }
+
+        if (!process.env.JWT_SECRET) {
+            throw new Error("JWT_SECRET is missing from .env");
+        }
+
+        user.lastLoginAt = new Date();
+        await user.save();
+
+        const token = jwt.sign(
+            { sub: user._id.toString() },
+            process.env.JWT_SECRET,
+            { expiresIn: "7d" }
+        );
+
+        res.cookie("token", token, {
+            ...sessionCookie(req),
+            maxAge: 7 * 24 * 60 * 60 * 1000
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Login successful",
+            user: {
+                id: user._id,
+                phone: user.phone,
+                email: user.email,
+                role: user.role
+            }
+        });
+    } catch (error) {
+        console.error("adminLogin error : ", error.message);
+
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong"
+        });
+    }
+};
+
 const getMe = async (req, res) => {
     return res.status(200).json({
         success: true,
         user: {
             id: req.user._id,
             phone: req.user.phone,
+            email: req.user.email,
             role: req.user.role
         }
     });
@@ -268,4 +353,4 @@ const logout = async (req, res) => {
     });
 };
 
-export { sendOtp, verifyOtp, getMe, logout };
+export { sendOtp, verifyOtp, adminLogin, getMe, logout };
