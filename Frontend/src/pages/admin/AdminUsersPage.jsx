@@ -2,9 +2,17 @@ import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { deleteAdminUser, listAdminUsers, updateAdminUser } from "../../api/admin";
 import { getErrorMessage } from "../../api/client";
-import { Alert, Button, Card, inputClass, PageTitle } from "../../components/ui";
+import { Alert, Badge, Button, Card, Empty, inputClass, PageTitle } from "../../components/ui";
+import { Reveal } from "../../components/motion";
 
 const ROLES = ["CUSTOMER", "MERCHANT", "STAFF", "SUPER_ADMIN"];
+
+const ROLE_TONE = {
+  CUSTOMER: "neutral",
+  MERCHANT: "purple",
+  STAFF: "amber",
+  SUPER_ADMIN: "ink"
+};
 
 export default function AdminUsersPage() {
   const [form, setForm] = useState({ search: "", role: "" });
@@ -75,120 +83,179 @@ export default function AdminUsersPage() {
   const pages = Math.max(1, Math.ceil(total / limit));
 
   return (
-    <div className="space-y-4">
-      <PageTitle title="Users" />
+    <div className="space-y-5">
+      <PageTitle
+        eyebrow="Super admin"
+        title="Users"
+        subtitle="Everyone with a login, and the access they carry."
+      />
       <Alert>{error}</Alert>
 
-      <Card>
-        <form className="grid gap-2 sm:grid-cols-[1fr_auto_auto]" onSubmit={submit}>
-          <input
-            className={inputClass}
-            placeholder="Search by name or phone"
-            value={form.search}
-            onChange={(e) => setForm({ ...form, search: e.target.value })}
-          />
-          <select
-            className={inputClass}
-            value={form.role}
-            onChange={(e) => {
-              setForm({ ...form, role: e.target.value });
-              setQuery({ search: form.search, role: e.target.value, page: 1 });
-            }}
-          >
-            <option value="">All</option>
-            {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
-          </select>
-          <Button type="submit">Search</Button>
-        </form>
-      </Card>
+      <Reveal>
+        <Card className="q-glass">
+          <form className="grid gap-2 sm:grid-cols-[1fr_auto_auto]" onSubmit={submit}>
+            <input
+              className={inputClass}
+              placeholder="Search by name or phone"
+              value={form.search}
+              onChange={(e) => setForm({ ...form, search: e.target.value })}
+            />
+            <select
+              className={inputClass}
+              value={form.role}
+              onChange={(e) => {
+                setForm({ ...form, role: e.target.value });
+                setQuery({ search: form.search, role: e.target.value, page: 1 });
+              }}
+            >
+              <option value="">All</option>
+              {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+            </select>
+            <Button type="submit">Search</Button>
+          </form>
+        </Card>
+      </Reveal>
 
-      <Card>
-        {rows.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-line text-xs uppercase tracking-wide text-purple">
-                  <th className="py-2">Name</th>
-                  <th className="py-2">Phone</th>
-                  <th className="py-2">Role</th>
-                  <th className="py-2">Active</th>
-                  <th className="py-2">Verified</th>
-                  <th className="py-2">Created</th>
-                  <th className="py-2">Last login</th>
-                  <th className="py-2">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row._id} className="border-b border-line last:border-0">
-                    <td className="py-2 text-ink">{row.name || "-"}</td>
-                    <td className="py-2 text-muted">{row.phone}</td>
-                    <td className="py-2">
-                      <select
-                        className={inputClass}
-                        value={row.role}
-                        disabled={busy === row._id}
-                        onChange={(e) => update(row._id, { role: e.target.value })}
-                      >
-                        {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
-                      </select>
-                    </td>
-                    <td className="py-2 text-muted">{row.isActive ? "Yes" : "No"}</td>
-                    <td className="py-2 text-muted">{row.isPhoneVerified ? "Yes" : "No"}</td>
-                    <td className="py-2 text-muted">{new Date(row.createdAt).toDateString()}</td>
-                    <td className="py-2 text-muted">{row.lastLoginAt ? new Date(row.lastLoginAt).toDateString() : "-"}</td>
-                    <td className="py-2">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          className="text-muted disabled:opacity-50"
-                          disabled={busy === row._id}
-                          onClick={() => update(row._id, { isActive: !row.isActive })}
-                        >
-                          {row.isActive ? "Deactivate" : "Activate"}
-                        </button>
-                        <button
-                          className="text-purple disabled:opacity-50"
-                          disabled={busy === row._id}
-                          onClick={() => rename(row)}
-                        >
-                          Rename
-                        </button>
-                        <button
-                          className="text-muted disabled:opacity-50"
-                          disabled={busy === row._id}
-                          onClick={() => remove(row)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
+      {rows.length ? (
+        <>
+          {/* Desktop: a clean table. */}
+          <Card className="hidden p-0 md:block">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[860px] text-left text-sm">
+                <thead className="sticky top-0 z-10 bg-panel">
+                  <tr className="border-b border-line text-[11px] uppercase tracking-[0.12em] text-purple">
+                    <th className="px-5 py-3 font-semibold">Name</th>
+                    <th className="px-5 py-3 font-semibold">Phone</th>
+                    <th className="px-5 py-3 font-semibold">Role</th>
+                    <th className="px-5 py-3 font-semibold">Active</th>
+                    <th className="px-5 py-3 font-semibold">Verified</th>
+                    <th className="px-5 py-3 font-semibold">Created</th>
+                    <th className="px-5 py-3 font-semibold">Last login</th>
+                    <th className="px-5 py-3 font-semibold">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-sm text-muted">No users found.</p>
-        )}
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row._id} className="border-b border-line transition-colors last:border-0 hover:bg-raised/60">
+                      <td className="px-5 py-3 font-semibold text-ink">{row.name || "-"}</td>
+                      <td className="px-5 py-3 text-muted">{row.phone}</td>
+                      <td className="px-5 py-3">
+                        <select
+                          className={inputClass}
+                          value={row.role}
+                          disabled={busy === row._id}
+                          onChange={(e) => update(row._id, { role: e.target.value })}
+                        >
+                          {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-5 py-3">
+                        <Badge tone={row.isActive ? "mint" : "neutral"}>{row.isActive ? "Yes" : "No"}</Badge>
+                      </td>
+                      <td className="px-5 py-3">
+                        <Badge tone={row.isPhoneVerified ? "mint" : "neutral"}>{row.isPhoneVerified ? "Yes" : "No"}</Badge>
+                      </td>
+                      <td className="px-5 py-3 text-muted">{new Date(row.createdAt).toDateString()}</td>
+                      <td className="px-5 py-3 text-muted">{row.lastLoginAt ? new Date(row.lastLoginAt).toDateString() : "-"}</td>
+                      <td className="px-5 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy === row._id}
+                            onClick={() => update(row._id, { isActive: !row.isActive })}
+                          >
+                            {row.isActive ? "Deactivate" : "Activate"}
+                          </Button>
+                          <Button size="sm" variant="outline" disabled={busy === row._id} onClick={() => rename(row)}>
+                            Rename
+                          </Button>
+                          <Button size="sm" variant="danger" disabled={busy === row._id} onClick={() => remove(row)}>
+                            Delete
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
 
-        <div className="mt-4 flex items-center justify-between text-sm text-muted">
-          <span>Page {query.page} of {pages} · {total} total</span>
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              disabled={query.page <= 1}
-              onClick={() => setQuery({ ...query, page: query.page - 1 })}
-            >
-              Prev
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={query.page >= pages}
-              onClick={() => setQuery({ ...query, page: query.page + 1 })}
-            >
-              Next
-            </Button>
+          {/* Mobile: the same rows as cards. */}
+          <div className="space-y-3 md:hidden">
+            {rows.map((row) => (
+              <Card key={row._id} className="space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-ink">{row.name || "-"}</p>
+                    <p className="mt-0.5 text-xs text-muted">{row.phone}</p>
+                  </div>
+                  <Badge tone={ROLE_TONE[row.role] || "purple"}>{row.role}</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-2xl bg-raised px-3 py-2">
+                    <p className="text-muted">Active</p>
+                    <p className="mt-0.5 font-medium text-ink">{row.isActive ? "Yes" : "No"}</p>
+                  </div>
+                  <div className="rounded-2xl bg-raised px-3 py-2">
+                    <p className="text-muted">Verified</p>
+                    <p className="mt-0.5 font-medium text-ink">{row.isPhoneVerified ? "Yes" : "No"}</p>
+                  </div>
+                  <div className="col-span-2 rounded-2xl bg-raised px-3 py-2">
+                    <p className="text-muted">Last login</p>
+                    <p className="mt-0.5 font-medium text-ink">{row.lastLoginAt ? new Date(row.lastLoginAt).toDateString() : "-"}</p>
+                  </div>
+                </div>
+                <select
+                  className={inputClass}
+                  value={row.role}
+                  disabled={busy === row._id}
+                  onChange={(e) => update(row._id, { role: e.target.value })}
+                >
+                  {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+                </select>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy === row._id}
+                    onClick={() => update(row._id, { isActive: !row.isActive })}
+                  >
+                    {row.isActive ? "Deactivate" : "Activate"}
+                  </Button>
+                  <Button size="sm" variant="outline" disabled={busy === row._id} onClick={() => rename(row)}>
+                    Rename
+                  </Button>
+                  <Button size="sm" variant="danger" disabled={busy === row._id} onClick={() => remove(row)}>
+                    Delete
+                  </Button>
+                </div>
+              </Card>
+            ))}
           </div>
+        </>
+      ) : (
+        <Empty title="No users found" text="Try a different search or role filter." />
+      )}
+
+      <Card className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-sm text-muted">Page {query.page} of {pages} · {total} total</span>
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            disabled={query.page <= 1}
+            onClick={() => setQuery({ ...query, page: query.page - 1 })}
+          >
+            Prev
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={query.page >= pages}
+            onClick={() => setQuery({ ...query, page: query.page + 1 })}
+          >
+            Next
+          </Button>
         </div>
       </Card>
     </div>

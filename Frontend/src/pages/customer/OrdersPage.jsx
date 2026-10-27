@@ -3,7 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { cancelMyOrder, getMyOrders } from "../../api/order";
 import { getErrorMessage } from "../../api/client";
 import { joinStoreRoom } from "../../lib/socket";
-import { Alert, Button, Card, Empty, PageTitle } from "../../components/ui";
+import { Icon } from "../../components/icons";
+import { Alert, Badge, Button, Card, Empty, PageTitle } from "../../components/ui";
 
 const STATUS_LABEL = {
   PLACED: "Sent to the kitchen",
@@ -14,13 +15,14 @@ const STATUS_LABEL = {
   CANCELLED: "Cancelled"
 };
 
-const STATUS_TONE = {
-  PLACED: "bg-purple text-white",
-  ACCEPTED: "bg-lavender text-ink",
-  PREPARING: "bg-lavender text-ink",
-  READY: "bg-raised text-ink",
-  SERVED: "bg-raised text-muted",
-  CANCELLED: "bg-raised text-muted"
+// Status to badge tone, so the colour carries the meaning at a glance.
+const STATUS_BADGE = {
+  PLACED: "purple",
+  ACCEPTED: "purple",
+  PREPARING: "amber",
+  READY: "mint",
+  SERVED: "neutral",
+  CANCELLED: "rose"
 };
 
 // The happy path an order walks through, used for the small progress strip.
@@ -81,52 +83,58 @@ export default function OrdersPage() {
         const items = order.items.reduce((sum, line) => sum + line.quantity, 0);
 
         return (
-          <Card key={order.id} className="space-y-3">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="font-semibold text-ink">{STATUS_LABEL[order.status] || order.status}</p>
-                <p className="text-xs text-muted">
-                  {items} {items === 1 ? "item" : "items"}
-                  {order.tableNumber ? ` · Table ${order.tableNumber}` : ""}
-                </p>
+          <Card key={order.id} className="space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-lavender text-purple">
+                  <Icon name="bag" className="h-5 w-5" />
+                </span>
+                <div>
+                  <p className="font-semibold text-ink">{STATUS_LABEL[order.status] || order.status}</p>
+                  <p className="text-xs text-muted">
+                    {items} {items === 1 ? "item" : "items"}
+                    {order.tableNumber ? ` · Table ${order.tableNumber}` : ""}
+                  </p>
+                </div>
               </div>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${STATUS_TONE[order.status] || "bg-raised text-ink"}`}>
-                {order.status}
-              </span>
+              <Badge tone={STATUS_BADGE[order.status] || "neutral"}>{order.status}</Badge>
             </div>
 
             {stepIndex >= 0 ? (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 {STEPS.map((step, i) => (
                   <span
                     key={step}
-                    className={`h-1.5 flex-1 rounded-full ${i <= stepIndex ? "bg-purple" : "bg-raised"}`}
+                    className={`h-1.5 flex-1 rounded-full transition-colors duration-500 ${
+                      i <= stepIndex ? "bg-purple" : "bg-raised"
+                    }`}
                   />
                 ))}
               </div>
             ) : null}
 
             {left > 0 && order.status !== "READY" ? (
-              <p className="text-sm text-ink">
+              <div className="flex items-center gap-2 rounded-2xl bg-raised px-3.5 py-2.5 text-sm text-ink">
+                <Icon name="queue" className="h-4 w-4 text-purple" />
                 Ready in about <span className="font-bold text-purple">{left} min</span>
-              </p>
+              </div>
             ) : null}
 
-            <div className="space-y-1 border-t border-line pt-2 text-sm">
+            <div className="space-y-2 rounded-2xl border border-line bg-raised/60 p-3 text-sm">
               {order.items.map((line, i) => (
-                <div key={i} className="flex justify-between text-muted">
-                  <span>
-                    {line.isFree ? <span className="text-purple">FREE </span> : null}
+                <div key={i} className="flex justify-between gap-3 text-muted">
+                  <span className="min-w-0 truncate">
+                    {line.isFree ? <span className="font-semibold text-purple">FREE </span> : null}
                     {line.name} × {line.quantity}
                   </span>
-                  <span className="text-ink">₹{line.price * line.quantity}</span>
+                  <span className="shrink-0 text-ink">₹{line.price * line.quantity}</span>
                 </div>
               ))}
             </div>
 
-            <div className="flex items-center justify-between border-t border-line pt-2 text-sm">
+            <div className="flex items-center justify-between gap-3 border-t border-line pt-3 text-sm">
               <span className="text-muted">
-                {order.discount > 0 ? <span className="text-purple">Saved ₹{order.discount} · </span> : null}
+                {order.discount > 0 ? <span className="font-medium text-purple">Saved ₹{order.discount} · </span> : null}
                 Total <span className="font-bold text-ink">₹{order.total}</span>
               </span>
               {canCancel ? (

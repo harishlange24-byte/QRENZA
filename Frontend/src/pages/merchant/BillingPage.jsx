@@ -15,7 +15,9 @@ import {
   requestRefund
 } from "../../api/billing";
 import { getErrorMessage } from "../../api/client";
-import { Alert, Button, Card, Field, inputClass, PageTitle } from "../../components/ui";
+import { Alert, Badge, Button, Card, Field, inputClass, PageTitle } from "../../components/ui";
+import { Icon } from "../../components/icons";
+import { Reveal } from "../../components/motion";
 
 const money = (paise) => (paise === null || paise === undefined ? "-" : `₹${(paise / 100).toLocaleString("en-IN")}`);
 
@@ -203,68 +205,100 @@ export default function BillingPage() {
   const usage = access?.locationUsage;
 
   return (
-    <div className="space-y-4">
-      <PageTitle title="Billing & plans" subtitle="Your plan, trial, payments, refunds and cancellation." />
-      <Alert>{error}</Alert>
-      <Alert>{notice}</Alert>
+    <div className="space-y-6">
+      <Reveal>
+        <PageTitle
+          eyebrow="Account"
+          title="Billing & plans"
+          subtitle="Your plan, trial, payments, refunds and cancellation."
+        />
+      </Reveal>
 
-      <Card className={usable ? "border-purple bg-white" : ""}>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className={`text-xs uppercase tracking-widest ${usable ? "text-ink/60" : "text-purple"}`}>Current plan</p>
-            <p className="text-2xl font-semibold text-ink">
-              {access?.plan?.displayName || "No plan selected"}
-            </p>
+      <Alert tone="error">{error}</Alert>
+      <Alert tone="success">{notice}</Alert>
+
+      <Reveal>
+        <Card halo className="overflow-hidden p-0">
+          <div className="relative overflow-hidden bg-[linear-gradient(135deg,#2e0b72_0%,#6d28d9_55%,#8b5cf6_100%)] px-5 py-6 text-white sm:px-7">
+            <div className="q-dots pointer-events-none absolute inset-0 opacity-20" />
+            <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/15 blur-3xl q-float" />
+
+            <div className="relative flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/70">Current plan</p>
+                <p className="mt-1 text-2xl font-semibold sm:text-3xl">
+                  {access?.plan?.displayName || "No plan selected"}
+                </p>
+              </div>
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  usable ? "bg-white text-purple" : "bg-white/15 text-white/90 ring-1 ring-inset ring-white/30"
+                }`}
+              >
+                {STATUS_LABEL[status] || status}
+              </span>
+            </div>
+
+            <div className="relative mt-5 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-white/10 p-3">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/60">Access until</p>
+                <p className="mt-1 text-sm font-medium">
+                  {access?.accessUntil ? new Date(access.accessUntil).toDateString() : "-"}
+                </p>
+              </div>
+              <div className="rounded-2xl bg-white/10 p-3">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/60">Renewal</p>
+                <p className="mt-1 text-sm font-medium">
+                  {access?.trialLabel ? `Trial: ${access.trialLabel}` : access?.autoRenew ? "Renews yearly" : "Renewal off"}
+                </p>
+              </div>
+              <div className="rounded-2xl bg-white/10 p-3">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-white/60">Locations</p>
+                <p className="mt-1 text-sm font-medium">
+                  {usage ? `${usage.used}${usage.unlimited ? "" : ` / ${usage.limit}`}${usage.unlimited ? " (unlimited)" : ""}` : "-"}
+                </p>
+              </div>
+            </div>
+
+            {access?.messages?.length ? (
+              <ul className="relative mt-4 space-y-1 text-sm text-white/80">
+                {access.messages.map((msg) => <li key={msg}>• {msg}</li>)}
+              </ul>
+            ) : null}
           </div>
-          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${usable ? "bg-purple text-white" : "border border-line bg-raised text-purple"}`}>
-            {STATUS_LABEL[status] || status}
-          </span>
-        </div>
-
-        <div className={`mt-3 grid gap-2 text-sm sm:grid-cols-3 ${usable ? "text-ink/70" : "text-muted"}`}>
-          <p>Access until: <span className="font-medium">{access?.accessUntil ? new Date(access.accessUntil).toDateString() : "-"}</span></p>
-          <p>{access?.trialLabel ? `Trial: ${access.trialLabel}` : access?.autoRenew ? "Renews yearly" : "Renewal off"}</p>
-          <p>
-            Locations: <span className="font-medium">
-              {usage ? `${usage.used}${usage.unlimited ? "" : ` / ${usage.limit}`}${usage.unlimited ? " (unlimited)" : ""}` : "-"}
-            </span>
-          </p>
-        </div>
-
-        {access?.messages?.length ? (
-          <ul className={`mt-3 space-y-1 text-sm ${usable ? "text-ink/70" : "text-muted"}`}>
-            {access.messages.map((msg) => <li key={msg}>• {msg}</li>)}
-          </ul>
-        ) : null}
-      </Card>
+        </Card>
+      </Reveal>
 
       <div>
-        <p className="mb-2 text-sm font-semibold text-ink">Available plans</p>
+        <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-purple">Available plans</p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {plans.map((plan) => {
             const isCurrent = access?.hasPlan && plan.code === access.planCode;
             return (
-              <Card key={plan.code} className={plan.recommended ? "border-purple" : ""}>
-                <p className="text-base font-semibold text-ink">{plan.displayName}</p>
+              <Card key={plan.code} hover className={plan.recommended ? "border-purple shadow-glow" : ""}>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-base font-semibold text-ink">{plan.displayName}</p>
+                  {plan.recommended ? <Badge tone="purple">Recommended</Badge> : null}
+                </div>
                 <p className="mt-1 text-xs text-muted">{plan.description}</p>
-                <p className="mt-3 text-xl font-semibold text-ink">
+                <p className="mt-3 text-2xl font-semibold text-ink">
                   {plan.isContactOnly ? "Custom" : plan.totals.displayPayable}
-                  {!plan.isContactOnly ? <span className="text-xs text-muted"> / year</span> : null}
+                  {!plan.isContactOnly ? <span className="text-xs font-medium text-muted"> / year</span> : null}
                 </p>
                 {!plan.isContactOnly && billing?.pricesIncludeTax ? (
                   <p className="mt-1 text-xs text-muted">Includes {plan.totals.taxLabel} ({plan.totals.taxPercent}%)</p>
                 ) : null}
 
-                <ul className="mt-3 space-y-1 text-xs text-muted">
+                <ul className="mt-4 space-y-2 text-xs text-muted">
                   {(plan.features || []).map((code) => (
                     <li key={code} className="flex gap-2">
-                      <span className="text-purple">•</span>
+                      <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-lavender text-[9px] text-purple">✓</span>
                       <span>{labels[code] || code}</span>
                     </li>
                   ))}
                 </ul>
 
-                <div className="mt-4 space-y-2">
+                <div className="mt-5 space-y-2">
                   {plan.isContactOnly ? (
                     <Button variant="ghost" className="w-full" onClick={() => navigate("/pricing#enterprise")}>
                       Request a quote
@@ -309,157 +343,227 @@ export default function BillingPage() {
       </div>
 
       {access?.hasPlan && !access?.cancelAtPeriodEnd ? (
-        <Card>
-          <PageTitle title="Cancel renewal" subtitle="Access continues until the end of the period you already paid for." />
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-            <input
-              className={inputClass}
-              placeholder="Reason (optional)"
-              value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
-            />
-            <Button variant="ghost" disabled={busy === "cancel"} onClick={cancel}>
-              {busy === "cancel" ? "Cancelling…" : "Cancel renewal"}
-            </Button>
-          </div>
-        </Card>
+        <Reveal>
+          <Card className="space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-lavender text-purple">
+                <Icon name="bell" className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-ink">Cancel renewal</p>
+                <p className="text-xs text-muted">Access continues until the end of the period you already paid for.</p>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <input
+                className={inputClass}
+                placeholder="Reason (optional)"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+              />
+              <Button variant="ghost" disabled={busy === "cancel"} onClick={cancel}>
+                {busy === "cancel" ? "Cancelling…" : "Cancel renewal"}
+              </Button>
+            </div>
+          </Card>
+        </Reveal>
       ) : null}
 
       {access?.hasPlan && access?.cancelAtPeriodEnd ? (
-        <Card className="border-purple">
-          <PageTitle title="Renewal cancelled" subtitle="You can turn automatic renewal back on until the paid period ends." />
-          <div className="flex items-end">
-            <Button disabled={busy === "resume"} onClick={resume}>
-              {busy === "resume" ? "Resuming…" : "Resume renewal"}
-            </Button>
-          </div>
-        </Card>
+        <Reveal>
+          <Card className="space-y-4 border-purple">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-lavender text-purple">
+                <Icon name="stamp" className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-ink">Renewal cancelled</p>
+                <p className="text-xs text-muted">You can turn automatic renewal back on until the paid period ends.</p>
+              </div>
+            </div>
+            <div className="flex items-end">
+              <Button disabled={busy === "resume"} onClick={resume}>
+                {busy === "resume" ? "Resuming…" : "Resume renewal"}
+              </Button>
+            </div>
+          </Card>
+        </Reveal>
       ) : null}
 
-      <Card>
-        <PageTitle title="Request a refund" subtitle="A request is reviewed by an admin before any money is returned." />
-        <form className="grid gap-3 md:grid-cols-3" onSubmit={sendRefund}>
-          <Field label="Paid payment">
-            <select className={inputClass} value={refund.paymentId} onChange={(e) => setRefund({ ...refund, paymentId: e.target.value })}>
-              <option value="">Select a payment</option>
-              {history.payments.filter((p) => p.status === "PAID").map((p) => (
-                <option key={p.id} value={p.id}>{money(p.amount)} · {p.planCode} · {new Date(p.createdAt).toDateString()}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Reason">
-            <input
-              className={inputClass}
-              placeholder="Why are you requesting a refund?"
-              value={refund.reason}
-              onChange={(e) => setRefund({ ...refund, reason: e.target.value })}
-            />
-          </Field>
-          <div className="flex items-end">
-            <Button className="w-full" disabled={busy === "refund"}>Submit request</Button>
+      <Reveal>
+        <Card>
+          <div className="mb-4 flex items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-lavender text-purple">
+              <Icon name="card" className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-ink">Request a refund</p>
+              <p className="text-xs text-muted">A request is reviewed by an admin before any money is returned.</p>
+            </div>
           </div>
-        </form>
-        {billing?.refundPolicy ? (
-          <p className="mt-3 text-xs text-muted">
-            Eligible within {billing.refundPolicy.firstPurchaseWindowDays} days of the first purchase, or{" "}
-            {billing.refundPolicy.renewalWindowDays} days of a renewal if unused. Contact {billing.supportEmail}.
-          </p>
-        ) : null}
-      </Card>
 
-      <Card>
-        <PageTitle title="Enterprise" subtitle="Unlimited locations and custom terms." />
-        <form className="grid gap-3 md:grid-cols-3" onSubmit={sendQuote}>
-          <Field label="Expected locations">
-            <input
-              className={inputClass}
-              placeholder="e.g. 25"
-              value={quote.expectedLocations}
-              onChange={(e) => setQuote({ ...quote, expectedLocations: e.target.value })}
-            />
-          </Field>
-          <Field label="Note">
-            <input
-              className={inputClass}
-              placeholder="Anything we should know"
-              value={quote.note}
-              onChange={(e) => setQuote({ ...quote, note: e.target.value })}
-            />
-          </Field>
-          <div className="flex items-end">
-            <Button variant="ghost" className="w-full" disabled={busy === "quote"}>Send request</Button>
-          </div>
-        </form>
-      </Card>
-
-      <Card>
-        <PageTitle title="Subscription history" subtitle="Every subscription on this account." />
-        {history.subscriptions.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-line text-xs uppercase tracking-wide text-purple">
-                  <th className="py-2">Plan</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2">Period</th>
-                  <th className="py-2">Paid</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.subscriptions.map((s) => (
-                  <tr key={s.id} className="border-b border-line last:border-0">
-                    <td className="py-2 text-ink">{s.planName}{s.isTrial ? " (trial)" : ""}</td>
-                    <td className="py-2 text-muted">{STATUS_LABEL[s.status] || s.status}</td>
-                    <td className="py-2 text-muted">
-                      {new Date(s.trialStart || s.currentPeriodStart || s.createdAt).toDateString()}
-                      {" → "}
-                      {s.trialEnd || s.currentPeriodEnd ? new Date(s.trialEnd || s.currentPeriodEnd).toDateString() : "-"}
-                    </td>
-                    <td className="py-2 text-ink">{money(s.totalPaidAmount)}</td>
-                  </tr>
+          <form className="grid gap-3 md:grid-cols-3" onSubmit={sendRefund}>
+            <Field label="Paid payment">
+              <select className={inputClass} value={refund.paymentId} onChange={(e) => setRefund({ ...refund, paymentId: e.target.value })}>
+                <option value="">Select a payment</option>
+                {history.payments.filter((p) => p.status === "PAID").map((p) => (
+                  <option key={p.id} value={p.id}>{money(p.amount)} · {p.planCode} · {new Date(p.createdAt).toDateString()}</option>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-sm text-muted">No subscriptions yet.</p>
-        )}
-      </Card>
+              </select>
+            </Field>
+            <Field label="Reason">
+              <input
+                className={inputClass}
+                placeholder="Why are you requesting a refund?"
+                value={refund.reason}
+                onChange={(e) => setRefund({ ...refund, reason: e.target.value })}
+              />
+            </Field>
+            <div className="flex items-end">
+              <Button className="w-full" disabled={busy === "refund"}>Submit request</Button>
+            </div>
+          </form>
 
-      <Card>
-        <PageTitle title="Payment history" subtitle="Verified payments and their refunds." />
-        {history.payments.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-line text-xs uppercase tracking-wide text-purple">
-                  <th className="py-2">Date</th>
-                  <th className="py-2">Plan</th>
-                  <th className="py-2">Amount</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2">Refunded</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.payments.map((p) => (
-                  <tr key={p.id} className="border-b border-line last:border-0">
-                    <td className="py-2 text-muted">{new Date(p.createdAt).toDateString()}</td>
-                    <td className="py-2 text-ink">{p.planCode}</td>
-                    <td className="py-2 text-ink">{money(p.amount)}</td>
-                    <td className="py-2 text-muted">{p.status}</td>
-                    <td className="py-2 text-muted">{p.refundAmount ? money(p.refundAmount) : "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {billing?.refundPolicy ? (
+            <p className="mt-3 text-xs text-muted">
+              Eligible within {billing.refundPolicy.firstPurchaseWindowDays} days of the first purchase, or{" "}
+              {billing.refundPolicy.renewalWindowDays} days of a renewal if unused. Contact {billing.supportEmail}.
+            </p>
+          ) : null}
+        </Card>
+      </Reveal>
+
+      <Reveal>
+        <Card className="relative overflow-hidden">
+          <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-lavender/70 blur-3xl" />
+          <div className="relative mb-4 flex items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-lavender text-purple">
+              <Icon name="briefcase" className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-ink">Enterprise</p>
+              <p className="text-xs text-muted">Unlimited locations and custom terms.</p>
+            </div>
           </div>
-        ) : (
-          <p className="text-sm text-muted">No payments yet.</p>
-        )}
-      </Card>
+
+          <form className="relative grid gap-3 md:grid-cols-3" onSubmit={sendQuote}>
+            <Field label="Expected locations">
+              <input
+                className={inputClass}
+                placeholder="e.g. 25"
+                value={quote.expectedLocations}
+                onChange={(e) => setQuote({ ...quote, expectedLocations: e.target.value })}
+              />
+            </Field>
+            <Field label="Note">
+              <input
+                className={inputClass}
+                placeholder="Anything we should know"
+                value={quote.note}
+                onChange={(e) => setQuote({ ...quote, note: e.target.value })}
+              />
+            </Field>
+            <div className="flex items-end">
+              <Button variant="ghost" className="w-full" disabled={busy === "quote"}>Send request</Button>
+            </div>
+          </form>
+        </Card>
+      </Reveal>
+
+      <Reveal>
+        <Card>
+          <div className="mb-4 flex items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-lavender text-purple">
+              <Icon name="file" className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-ink">Subscription history</p>
+              <p className="text-xs text-muted">Every subscription on this account.</p>
+            </div>
+          </div>
+
+          {history.subscriptions.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-wide text-purple">
+                    <th className="py-2.5 pr-4 font-semibold">Plan</th>
+                    <th className="py-2.5 pr-4 font-semibold">Status</th>
+                    <th className="py-2.5 pr-4 font-semibold">Period</th>
+                    <th className="py-2.5 font-semibold">Paid</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.subscriptions.map((s) => (
+                    <tr key={s.id} className="border-b border-line last:border-0">
+                      <td className="py-2.5 pr-4 text-ink">{s.planName}{s.isTrial ? " (trial)" : ""}</td>
+                      <td className="py-2.5 pr-4 text-muted">{STATUS_LABEL[s.status] || s.status}</td>
+                      <td className="py-2.5 pr-4 text-muted">
+                        {new Date(s.trialStart || s.currentPeriodStart || s.createdAt).toDateString()}
+                        {" → "}
+                        {s.trialEnd || s.currentPeriodEnd ? new Date(s.trialEnd || s.currentPeriodEnd).toDateString() : "-"}
+                      </td>
+                      <td className="py-2.5 text-ink">{money(s.totalPaidAmount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="rounded-2xl bg-raised px-4 py-6 text-center text-sm text-muted">No subscriptions yet.</p>
+          )}
+        </Card>
+      </Reveal>
+
+      <Reveal>
+        <Card>
+          <div className="mb-4 flex items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-lavender text-purple">
+              <Icon name="card" className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-ink">Payment history</p>
+              <p className="text-xs text-muted">Verified payments and their refunds.</p>
+            </div>
+          </div>
+
+          {history.payments.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-wide text-purple">
+                    <th className="py-2.5 pr-4 font-semibold">Date</th>
+                    <th className="py-2.5 pr-4 font-semibold">Plan</th>
+                    <th className="py-2.5 pr-4 font-semibold">Amount</th>
+                    <th className="py-2.5 pr-4 font-semibold">Status</th>
+                    <th className="py-2.5 font-semibold">Refunded</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.payments.map((p) => (
+                    <tr key={p.id} className="border-b border-line last:border-0">
+                      <td className="py-2.5 pr-4 text-muted">{new Date(p.createdAt).toDateString()}</td>
+                      <td className="py-2.5 pr-4 text-ink">{p.planCode}</td>
+                      <td className="py-2.5 pr-4 text-ink">{money(p.amount)}</td>
+                      <td className="py-2.5 pr-4">
+                        <Badge tone={p.status === "PAID" ? "mint" : p.status === "REFUNDED" ? "amber" : "neutral"}>
+                          {p.status}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5 text-muted">{p.refundAmount ? money(p.refundAmount) : "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="rounded-2xl bg-raised px-4 py-6 text-center text-sm text-muted">No payments yet.</p>
+          )}
+        </Card>
+      </Reveal>
 
       <p className="text-xs text-muted">
-        Need to compare plans? See the <Link to="/pricing" className="text-purple">pricing page</Link>.
+        Need to compare plans? See the <Link to="/pricing" className="font-medium text-purple">pricing page</Link>.
       </p>
     </div>
   );

@@ -7,7 +7,9 @@ import { cancelSupplyOrder, createSupplyOrder, listSupplyCatalog, listSupplyOrde
 import { getErrorMessage } from "../../api/client";
 import { supplyOrderSchema } from "../../lib/schemas";
 import { FEATURE_LABELS } from "../../lib/features";
-import { Alert, Button, Card, Empty, Field, inputClass, PageTitle } from "../../components/ui";
+import { Alert, Badge, Button, Card, Empty, Field, inputClass, PageTitle } from "../../components/ui";
+import { Icon } from "../../components/icons";
+import { Reveal } from "../../components/motion";
 import { useMerchantStore } from "../../context/MerchantStoreContext";
 import { useAccess } from "../../context/AccessContext";
 
@@ -105,142 +107,203 @@ export default function SuppliesPage() {
     }
   }
 
-  const included = (access?.features || []).map((f) => FEATURE_LABELS[f] || f);
+  const featureCodes = access?.features || [];
+  const included = featureCodes.map((f) => FEATURE_LABELS[f] || f);
+  const locked = Object.keys(FEATURE_LABELS).filter((code) => !featureCodes.includes(code));
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <div>
-        <PageTitle title="Supplies" subtitle="Printed QR standees, table tents and stickers" />
-        <Alert>{error}</Alert>
+    <div className="space-y-6">
+      <Reveal>
+        <PageTitle
+          eyebrow="Shop kit"
+          title="Supplies"
+          subtitle="Printed QR standees, table tents and stickers"
+        />
+      </Reveal>
 
-        <Card className="mb-4 space-y-3">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-purple">Your plan</p>
-            <p className="text-lg font-semibold text-ink">
-              {access?.plan?.displayName || access?.planCode || "No plan selected"}
-            </p>
-          </div>
-          {included.length ? (
-            <div className="flex flex-wrap gap-1.5">
-              {included.map((label) => (
-                <span key={label} className="rounded-full border border-line bg-raised px-2 py-0.5 text-[11px] text-muted">
-                  {label}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted">Start a plan to unlock more of Qrenza.</p>
-          )}
-          <p className="text-xs text-muted">
-            Standees and stickers are billed once, delivery is a flat ₹{rupees(shipping || 4900)} per order.
-          </p>
-        </Card>
+      <Alert>{error}</Alert>
 
-        <div className="space-y-3">
-          {products.map((product) => (
-            <Card key={product.id} className="flex items-center justify-between gap-3">
-              <div>
-                <p className="font-semibold text-ink">{product.name}</p>
-                <p className="text-sm text-muted">{product.description}</p>
-                <p className="mt-1 text-sm font-bold text-purple">₹{rupees(product.price)}</p>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-4">
+          <Reveal>
+            <Card className="overflow-hidden p-0">
+              <div className="relative overflow-hidden bg-[linear-gradient(135deg,#2e0b72_0%,#6d28d9_55%,#8b5cf6_100%)] px-5 py-5 text-white">
+                <div className="q-dots pointer-events-none absolute inset-0 opacity-20" />
+                <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-white/15 blur-3xl q-float" />
+                <div className="relative">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/70">Your plan</p>
+                  <p className="mt-1 text-2xl font-semibold">
+                    {access?.plan?.displayName || access?.planCode || "No plan selected"}
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-white/80">
+                    Standees and stickers are billed once, delivery is a flat ₹{rupees(shipping || 4900)} per order.
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  className="h-8 w-8 rounded-xl border border-line text-ink"
-                  onClick={() => setQty(product, qtyOf(product.id) - 1)}
-                >
-                  −
-                </button>
-                <span className="w-4 text-center text-sm font-semibold text-ink">{qtyOf(product.id)}</span>
-                <button
-                  className="h-8 w-8 rounded-xl border border-line text-ink"
-                  onClick={() => setQty(product, qtyOf(product.id) + 1)}
-                >
-                  +
-                </button>
+
+              <div className="space-y-4 p-5">
+                {included.length ? (
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-purple">Unlocked</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {included.map((label) => (
+                        <Badge key={label} tone="mint">✓ {label}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted">Start a plan to unlock more of Qrenza.</p>
+                )}
+
+                {locked.length ? (
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted">Locked</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {locked.map((code) => (
+                        <Badge key={code} tone="outline">{FEATURE_LABELS[code] || code}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </Card>
-          ))}
-        </div>
+          </Reveal>
 
-        <Card className="mt-4">
-          <p className="mb-3 text-sm font-semibold text-ink">Delivery details</p>
-          <form className="space-y-3" onSubmit={form.handleSubmit(submit)}>
-            <Field label="Contact name" error={form.formState.errors.contactName?.message}>
-              <input className={inputClass} {...form.register("contactName")} />
-            </Field>
-            <Field label="Contact phone" error={form.formState.errors.contactPhone?.message}>
-              <input className={inputClass} maxLength={10} {...form.register("contactPhone")} />
-            </Field>
-            <Field label="Delivery address" error={form.formState.errors.deliveryAddress?.message}>
-              <input className={inputClass} {...form.register("deliveryAddress")} />
-            </Field>
-            <Field label="Note (optional)">
-              <input className={inputClass} {...form.register("note")} />
-            </Field>
-
-            <div className="rounded-2xl bg-raised p-3 text-sm">
-              <div className="flex justify-between text-muted">
-                <span>Items</span>
-                <span>₹{rupees(subtotal)}</span>
-              </div>
-              <div className="flex justify-between text-muted">
-                <span>Delivery</span>
-                <span>₹{rupees(cart.length ? shipping : 0)}</span>
-              </div>
-              <div className="mt-1 flex justify-between font-bold text-ink">
-                <span>Total</span>
-                <span className="text-purple">₹{rupees(total)}</span>
-              </div>
-            </div>
-
-            <Button className="w-full">Place supply order</Button>
-          </form>
-        </Card>
-      </div>
-
-      <div className="space-y-3">
-        <PageTitle title="Past supply orders" subtitle={`${orders.length} order${orders.length === 1 ? "" : "s"}`} />
-        {!orders.length ? <Empty title="No supply orders" text="Order a standee and it will show up here." /> : null}
-        {orders.map((order) => (
-          <Card key={order.id} className="space-y-2">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-semibold text-ink">
-                  {order.items.reduce((n, l) => n + l.quantity, 0)} item
-                  {order.items.reduce((n, l) => n + l.quantity, 0) === 1 ? "" : "s"}
-                </p>
-                <p className="text-xs text-muted">
-                  {new Date(order.createdAt).toLocaleDateString()} · {order.contactName} · {order.contactPhone}
-                </p>
-              </div>
-              <span
-                className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase ${
-                  order.status === "REQUESTED" ? "bg-lavender text-ink" : "bg-raised text-muted"
-                }`}
-              >
-                {order.status.toLowerCase()}
-              </span>
-            </div>
-            <div className="space-y-1 border-t border-line pt-2 text-sm">
-              {order.items.map((l, i) => (
-                <div key={i} className="flex justify-between text-muted">
-                  <span>{l.name} × {l.quantity}</span>
-                  <span className="text-ink">₹{rupees(l.price * l.quantity)}</span>
-                </div>
+          <Reveal delay={80}>
+            <div className="grid gap-3">
+              {products.map((product) => (
+                <Card key={product.id} hover className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-lavender text-purple">
+                      <Icon name="box" className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-ink">{product.name}</p>
+                      <p className="truncate text-sm text-muted">{product.description}</p>
+                      <p className="mt-1 text-sm font-bold text-purple">₹{rupees(product.price)}</p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      aria-label={`Remove one ${product.name}`}
+                      className="grid h-8 w-8 place-items-center rounded-xl border border-line text-ink transition hover:border-lilac hover:bg-raised"
+                      onClick={() => setQty(product, qtyOf(product.id) - 1)}
+                    >
+                      −
+                    </button>
+                    <span className="w-5 text-center text-sm font-semibold text-ink">{qtyOf(product.id)}</span>
+                    <button
+                      aria-label={`Add one ${product.name}`}
+                      className="grid h-8 w-8 place-items-center rounded-xl border border-line text-ink transition hover:border-lilac hover:bg-raised"
+                      onClick={() => setQty(product, qtyOf(product.id) + 1)}
+                    >
+                      +
+                    </button>
+                  </div>
+                </Card>
               ))}
             </div>
-            <div className="flex items-center justify-between border-t border-line pt-2">
-              <p className="text-sm text-muted">
-                Delivery ₹{rupees(order.shipping)} · Total <span className="font-bold text-ink">₹{rupees(order.total)}</span>
+          </Reveal>
+
+          <Reveal delay={120}>
+            <Card>
+              <div className="mb-4 flex items-center gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-lavender text-purple">
+                  <Icon name="cart" className="h-5 w-5" />
+                </span>
+                <p className="text-sm font-semibold text-ink">Delivery details</p>
+              </div>
+
+              <form className="space-y-3" onSubmit={form.handleSubmit(submit)}>
+                <Field label="Contact name" error={form.formState.errors.contactName?.message}>
+                  <input className={inputClass} {...form.register("contactName")} />
+                </Field>
+                <Field label="Contact phone" error={form.formState.errors.contactPhone?.message}>
+                  <input className={inputClass} maxLength={10} {...form.register("contactPhone")} />
+                </Field>
+                <Field label="Delivery address" error={form.formState.errors.deliveryAddress?.message}>
+                  <input className={inputClass} {...form.register("deliveryAddress")} />
+                </Field>
+                <Field label="Note (optional)">
+                  <input className={inputClass} {...form.register("note")} />
+                </Field>
+
+                <div className="space-y-1.5 rounded-2xl bg-raised p-4 text-sm">
+                  <div className="flex justify-between text-muted">
+                    <span>Items</span>
+                    <span>₹{rupees(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-muted">
+                    <span>Delivery</span>
+                    <span>₹{rupees(cart.length ? shipping : 0)}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between border-t border-line pt-2 font-bold text-ink">
+                    <span>Total</span>
+                    <span className="text-purple">₹{rupees(total)}</span>
+                  </div>
+                </div>
+
+                <Button className="w-full">Place supply order</Button>
+              </form>
+            </Card>
+          </Reveal>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-purple">Past supply orders</p>
+              <p className="mt-1 text-sm text-muted">
+                {orders.length} order{orders.length === 1 ? "" : "s"}
               </p>
-              {order.status === "REQUESTED" ? (
-                <Button variant="ghost" onClick={() => cancel(order.id)}>Cancel</Button>
-              ) : null}
             </div>
-            {order.deliveryAddress ? <p className="text-xs text-muted">To: {order.deliveryAddress}</p> : null}
-          </Card>
-        ))}
+          </div>
+
+          {!orders.length ? (
+            <Empty title="No supply orders" text="Order a standee and it will show up here." />
+          ) : (
+            <div className="grid gap-3">
+              {orders.map((order) => (
+                <Card key={order.id} hover className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-ink">
+                        {order.items.reduce((n, l) => n + l.quantity, 0)} item
+                        {order.items.reduce((n, l) => n + l.quantity, 0) === 1 ? "" : "s"}
+                      </p>
+                      <p className="truncate text-xs text-muted">
+                        {new Date(order.createdAt).toLocaleDateString()} · {order.contactName} · {order.contactPhone}
+                      </p>
+                    </div>
+                    <Badge tone={order.status === "REQUESTED" ? "purple" : "neutral"}>
+                      {order.status.toLowerCase()}
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-1 border-t border-line pt-3 text-sm">
+                    {order.items.map((l, i) => (
+                      <div key={i} className="flex justify-between gap-3 text-muted">
+                        <span className="truncate">{l.name} × {l.quantity}</span>
+                        <span className="shrink-0 text-ink">₹{rupees(l.price * l.quantity)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3">
+                    <p className="text-sm text-muted">
+                      Delivery ₹{rupees(order.shipping)} · Total <span className="font-bold text-ink">₹{rupees(order.total)}</span>
+                    </p>
+                    {order.status === "REQUESTED" ? (
+                      <Button variant="ghost" size="sm" onClick={() => cancel(order.id)}>Cancel</Button>
+                    ) : null}
+                  </div>
+
+                  {order.deliveryAddress ? <p className="truncate text-xs text-muted">To: {order.deliveryAddress}</p> : null}
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

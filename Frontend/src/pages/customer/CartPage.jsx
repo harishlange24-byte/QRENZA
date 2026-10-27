@@ -8,6 +8,7 @@ import { getErrorMessage } from "../../api/client";
 import { orderSchema } from "../../lib/schemas";
 import { useCart } from "../../context/CartContext";
 import { useVisit } from "../../context/VisitContext";
+import { Icon } from "../../components/icons";
 import { Alert, Button, Card, Empty, Field, inputClass, PageTitle } from "../../components/ui";
 
 export default function CartPage() {
@@ -37,6 +38,7 @@ export default function CartPage() {
 
   const lines = cart.code === code ? cart.lines : [];
   const subtotal = lines.reduce((sum, l) => sum + l.price * l.quantity, 0);
+  const count = lines.reduce((sum, l) => sum + l.quantity, 0);
 
   async function submit(values) {
     try {
@@ -68,84 +70,142 @@ export default function CartPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-28 lg:pb-0">
       <PageTitle title="Your cart" subtitle="Prices are confirmed by the store" />
       <Alert>{error}</Alert>
-      {lines.map((l) => (
-        <Card key={l.itemId} className="flex items-center justify-between">
-          <div>
-            <p className="font-semibold text-ink">{l.name}</p>
-            <p className="text-sm text-muted">₹{l.price} × {l.quantity}</p>
+
+      <form className="space-y-4" onSubmit={form.handleSubmit(submit)}>
+        <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr] lg:items-start">
+          <div className="space-y-4">
+            {/* Line items: tidy rows with the quantity stepper kept intact. */}
+            <div className="space-y-3">
+              {lines.map((l) => (
+                <Card key={l.itemId} className="flex items-center gap-3 p-3">
+                  <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-lavender text-purple">
+                    <Icon name="box" className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-ink">{l.name}</p>
+                    <p className="text-xs text-muted">₹{l.price} × {l.quantity}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      aria-label={`Reduce ${l.name}`}
+                      className="grid h-11 w-11 place-items-center rounded-2xl border border-line text-lg font-semibold text-ink transition hover:border-lilac active:scale-95"
+                      onClick={() => cart.setQty(code, l.itemId, l.quantity - 1)}
+                    >
+                      −
+                    </button>
+                    <span className="w-6 text-center text-sm font-semibold text-ink">{l.quantity}</span>
+                    <button
+                      type="button"
+                      aria-label={`Add another ${l.name}`}
+                      className="grid h-11 w-11 place-items-center rounded-2xl bg-[linear-gradient(135deg,#3b0f8f,#8b5cf6)] text-lg font-semibold text-white shadow-glow transition active:scale-95"
+                      onClick={() => cart.setQty(code, l.itemId, l.quantity + 1)}
+                    >
+                      +
+                    </button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            {cards.length ? (
+              <Card className="space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-purple">Your active gift cards</p>
+                <div className="space-y-2">
+                  {cards.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setGiftCode(c.code)}
+                      className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left text-sm transition ${
+                        giftCode === c.code ? "border-purple bg-lavender" : "border-line bg-panel hover:border-lilac"
+                      }`}
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white text-purple">
+                        <Icon name="gift" className="h-4 w-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-semibold text-ink">{c.title}</span>
+                        <span className="block text-xs text-muted">
+                          {c.type === "FREE_ITEM"
+                            ? `free ${c.freeItemName}`
+                            : c.discountType === "FIXED"
+                              ? `₹${c.value} off`
+                              : `${c.value}% off`}
+                        </span>
+                      </span>
+                      {giftCode === c.code ? (
+                        <span className="grid h-6 w-6 place-items-center rounded-full bg-purple text-xs text-white">✓</span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              </Card>
+            ) : null}
+
+            <Card className="space-y-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-purple">Your details</p>
+              <Field label="Name" error={form.formState.errors.customerName?.message}>
+                <input className={inputClass} {...form.register("customerName")} />
+              </Field>
+              <Field label="Phone" error={form.formState.errors.customerPhone?.message}>
+                <input className={inputClass} maxLength={10} {...form.register("customerPhone")} />
+              </Field>
+              <Field label="Table (optional)">
+                <input className={inputClass} {...form.register("tableNumber")} />
+              </Field>
+              <Field label="Gift card code (optional)">
+                <input
+                  className={`${inputClass} font-mono uppercase`}
+                  placeholder="GC-XXXXXXXX"
+                  value={giftCode}
+                  onChange={(e) => setGiftCode(e.target.value.toUpperCase())}
+                />
+              </Field>
+              <Field label="Note for the kitchen (optional)">
+                <input className={inputClass} {...form.register("note")} />
+              </Field>
+            </Card>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              className="h-8 w-8 rounded-xl border border-line text-ink"
-              onClick={() => cart.setQty(code, l.itemId, l.quantity - 1)}
-            >
-              −
-            </button>
-            <span className="w-4 text-center text-sm font-semibold text-ink">{l.quantity}</span>
-            <button
-              className="h-8 w-8 rounded-xl border border-line text-ink"
-              onClick={() => cart.setQty(code, l.itemId, l.quantity + 1)}
-            >
-              +
-            </button>
+
+          {/* Desktop summary: sticks beside the basket on wide screens. */}
+          <aside className="hidden lg:sticky lg:top-24 lg:block">
+            <Card className="space-y-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-purple">Order summary</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center justify-between text-muted">
+                  <span>Items</span>
+                  <span className="font-medium text-ink">{count}</span>
+                </div>
+                <div className="flex items-center justify-between text-muted">
+                  <span>Subtotal</span>
+                  <span className="font-medium text-ink">₹{subtotal}</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between border-t border-line pt-3">
+                <span className="text-sm text-muted">Total</span>
+                <span className="text-xl font-bold text-purple">₹{subtotal}</span>
+              </div>
+              <Button className="w-full">Place order</Button>
+            </Card>
+          </aside>
+        </div>
+
+        {/* Phone summary: sticks above the shell's bottom nav. */}
+        <div className="fixed bottom-20 left-0 right-0 z-20 mx-auto max-w-md px-4 lg:hidden">
+          <div className="q-glass flex items-center gap-3 rounded-3xl border border-line p-3 shadow-lift">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
+                {count} item{count === 1 ? "" : "s"}
+              </p>
+              <p className="text-lg font-bold text-purple">₹{subtotal}</p>
+            </div>
+            <Button className="ml-auto min-h-[44px] px-6">Place order</Button>
           </div>
-        </Card>
-      ))}
-
-      <Card className="flex items-center justify-between">
-        <p className="text-sm text-muted">Subtotal</p>
-        <p className="text-lg font-bold text-purple">₹{subtotal}</p>
-      </Card>
-
-      {cards.length ? (
-        <Card className="space-y-2">
-          <p className="text-xs font-medium tracking-wide text-purple">Your active gift cards</p>
-          {cards.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => setGiftCode(c.code)}
-              className={`block w-full rounded-2xl border px-3 py-2 text-left text-sm ${
-                giftCode === c.code ? "border-purple bg-raised" : "border-line"
-              }`}
-            >
-              <span className="font-semibold text-ink">{c.title}</span>
-              <span className="ml-2 text-xs text-muted">
-                {c.type === "FREE_ITEM"
-                  ? `free ${c.freeItemName}`
-                  : c.discountType === "FIXED"
-                    ? `₹${c.value} off`
-                    : `${c.value}% off`}
-              </span>
-            </button>
-          ))}
-        </Card>
-      ) : null}
-
-      <form className="space-y-3" onSubmit={form.handleSubmit(submit)}>
-        <Field label="Name" error={form.formState.errors.customerName?.message}>
-          <input className={inputClass} {...form.register("customerName")} />
-        </Field>
-        <Field label="Phone" error={form.formState.errors.customerPhone?.message}>
-          <input className={inputClass} maxLength={10} {...form.register("customerPhone")} />
-        </Field>
-        <Field label="Table (optional)">
-          <input className={inputClass} {...form.register("tableNumber")} />
-        </Field>
-        <Field label="Gift card code (optional)">
-          <input
-            className={inputClass}
-            placeholder="GC-XXXXXXXX"
-            value={giftCode}
-            onChange={(e) => setGiftCode(e.target.value.toUpperCase())}
-          />
-        </Field>
-        <Field label="Note for the kitchen (optional)">
-          <input className={inputClass} {...form.register("note")} />
-        </Field>
-        <Button className="w-full">Place order</Button>
+        </div>
       </form>
     </div>
   );

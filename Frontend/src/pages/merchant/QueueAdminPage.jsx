@@ -3,13 +3,15 @@ import { toast } from "react-toastify";
 import { callNext, getMerchantQueue, serveEntry, skipEntry } from "../../api/queue";
 import { getErrorMessage } from "../../api/client";
 import { joinStoreRoom } from "../../lib/socket";
-import { Alert, Button, Card, Empty, PageTitle } from "../../components/ui";
+import { Alert, Badge, Button, Card, Empty, PageTitle } from "../../components/ui";
+import { Icon } from "../../components/icons";
+import { Reveal } from "../../components/motion";
 import { useMerchantStore } from "../../context/MerchantStoreContext";
 
 const STATUS_TONE = {
-  CALLED: "bg-purple text-white",
-  SERVING: "bg-purple text-white",
-  WAITING: "bg-lavender text-ink"
+  CALLED: "purple",
+  SERVING: "mint",
+  WAITING: "neutral"
 };
 
 export default function QueueAdminPage() {
@@ -69,52 +71,71 @@ export default function QueueAdminPage() {
 
   return (
     <div className="space-y-4">
-      <PageTitle title="Queue desk" subtitle="Customers scan your QR, take a token and wait for their turn" />
+      <Reveal>
+        <PageTitle title="Queue desk" subtitle="Customers scan your QR, take a token and wait for their turn" />
+      </Reveal>
       <Alert>{error}</Alert>
 
-      <Card className="grid grid-cols-2 gap-4 text-center sm:grid-cols-4">
-        <div>
-          <p className="text-3xl font-semibold text-purple">{nowServing ? `#${nowServing.tokenNumber}` : "—"}</p>
-          <p className="text-xs text-muted">now serving</p>
+      <Reveal delay={60}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="relative overflow-hidden rounded-4xl bg-[linear-gradient(135deg,#3b0f8f,#6d28d9)] p-4 text-center shadow-soft">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/70">now serving</p>
+            <p className="mt-2 text-3xl font-semibold tracking-tight text-white">
+              {nowServing ? `#${nowServing.tokenNumber}` : "—"}
+            </p>
+          </div>
+          <div className="rounded-4xl border border-line bg-panel p-4 text-center shadow-soft">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">waiting</p>
+            <p className="mt-2 text-3xl font-semibold tracking-tight text-ink">{waiting}</p>
+          </div>
+          <div className="rounded-4xl border border-line bg-panel p-4 text-center shadow-soft">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">served today</p>
+            <p className="mt-2 text-3xl font-semibold tracking-tight text-ink">{queue?.counts?.servedToday ?? 0}</p>
+          </div>
+          <div className="rounded-4xl border border-line bg-panel p-4 text-center shadow-soft">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">avg per person</p>
+            <p className="mt-2 text-3xl font-semibold tracking-tight text-ink">{queue?.averageServiceMinutes ?? 0}m</p>
+          </div>
         </div>
-        <div>
-          <p className="text-3xl font-semibold text-ink">{waiting}</p>
-          <p className="text-xs text-muted">waiting</p>
-        </div>
-        <div>
-          <p className="text-3xl font-semibold text-ink">{queue?.counts?.servedToday ?? 0}</p>
-          <p className="text-xs text-muted">served today</p>
-        </div>
-        <div>
-          <p className="text-3xl font-semibold text-ink">{queue?.averageServiceMinutes ?? 0}m</p>
-          <p className="text-xs text-muted">avg per person</p>
-        </div>
-      </Card>
+      </Reveal>
 
-      <div className="flex flex-wrap gap-2">
-        <Button variant="accent" onClick={doCall}>Call next</Button>
-        <Button variant="ghost" onClick={load}>Refresh</Button>
-      </div>
+      <Reveal delay={90}>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="accent" onClick={doCall}>
+            <Icon name="queue" className="h-4 w-4" />
+            Call next
+          </Button>
+          <Button variant="ghost" onClick={load}>
+            <Icon name="spark" className="h-4 w-4 text-purple" />
+            Refresh
+          </Button>
+        </div>
+      </Reveal>
 
       {!entries.length ? <Empty title="Queue is empty" text="As soon as a customer takes a token it shows up here." /> : null}
 
-      {entries.map((e) => (
-        <Card key={e._id} className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-lg font-bold text-ink">
-              #{e.tokenNumber} <span className="text-base font-medium">{e.customerName}</span>
-            </p>
-            <p className="text-xs text-muted">{e.customerPhone}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase ${STATUS_TONE[e.status] || "bg-raised text-muted"}`}>
-              {e.status}
-            </span>
-            <Button onClick={() => move(e, "serve")}>Serve</Button>
-            <Button variant="ghost" onClick={() => move(e, "skip")}>Skip</Button>
-          </div>
-        </Card>
-      ))}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {entries.map((e) => (
+          <Card key={e._id} className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[linear-gradient(135deg,#3b0f8f,#8b5cf6)] text-base font-bold text-white shadow-glow sm:text-lg">
+                #{e.tokenNumber}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-lg font-bold text-ink">{e.customerName}</p>
+                <p className="truncate text-xs text-muted">{e.customerPhone}</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Badge tone={STATUS_TONE[e.status] || "neutral"}>{e.status}</Badge>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => move(e, "serve")}>Serve</Button>
+                <Button size="sm" variant="ghost" onClick={() => move(e, "skip")}>Skip</Button>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

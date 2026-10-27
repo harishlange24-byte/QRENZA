@@ -10,7 +10,9 @@ import { hasMapsKey } from "../../lib/maps";
 import { storeSchema } from "../../lib/schemas";
 import { useMerchantStore } from "../../context/MerchantStoreContext";
 import MapPicker from "../../components/MapPicker";
-import { Alert, Button, Card, Empty, Field, inputClass, PageTitle } from "../../components/ui";
+import { Alert, Badge, Button, Card, Empty, Field, inputClass, PageTitle } from "../../components/ui";
+import { Icon } from "../../components/icons";
+import { Reveal } from "../../components/motion";
 
 export default function StoresPage() {
   const { upsertStore, removeStore, stores: cached } = useMerchantStore();
@@ -140,100 +142,164 @@ export default function StoresPage() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      <div>
+    <div className="space-y-6">
+      <Reveal>
         <PageTitle
+          eyebrow="Locations"
           title="Stores"
           subtitle={editing ? "Editing an existing store" : "Name, phone, GPS, and a 20–500m geofence."}
         />
-        <Alert>{error}</Alert>
-        {error.toLowerCase().includes("location limit") ? (
-          <Link to="/merchant/billing" className="text-sm text-purple">Upgrade to add another location →</Link>
-        ) : null}
-        <Card>
-          <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
-            <Field label="Name" error={form.formState.errors.name?.message}>
-              <input className={inputClass} {...form.register("name")} />
-            </Field>
-            <Field label="Phone" error={form.formState.errors.phone?.message}>
-              <input className={inputClass} {...form.register("phone")} />
-            </Field>
-            <Field label="Address line">
-              <input className={inputClass} {...form.register("line1")} />
-            </Field>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="City"><input className={inputClass} {...form.register("city")} /></Field>
-              <Field label="Pincode"><input className={inputClass} {...form.register("pincode")} /></Field>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Latitude" error={form.formState.errors.latitude?.message}>
-                <input className={inputClass} {...form.register("latitude")} />
-              </Field>
-              <Field label="Longitude" error={form.formState.errors.longitude?.message}>
-                <input className={inputClass} {...form.register("longitude")} />
-              </Field>
-            </div>
-            <Button type="button" variant="ghost" onClick={fillGps}>Use current GPS</Button>
-            <Field label="Geofence metres">
-              <input className={inputClass} type="number" {...form.register("geofenceRadius")} />
-            </Field>
-            {hasMapsKey() ? (
-              <MapPicker
-                latitude={form.watch("latitude")}
-                longitude={form.watch("longitude")}
-                radius={form.watch("geofenceRadius")}
-                onChange={({ latitude, longitude }) => {
-                  form.setValue("latitude", latitude, { shouldValidate: true });
-                  form.setValue("longitude", longitude, { shouldValidate: true });
-                }}
-                onPlace={(address) => {
-                  Object.entries(address).forEach(([key, value]) => {
-                    if (value) form.setValue(key, value);
-                  });
-                }}
-              />
-            ) : null}
-            <div className="flex gap-2">
-              <Button className="flex-1">{editing ? "Save changes" : "Create store"}</Button>
-              {editing ? (
-                <Button type="button" variant="ghost" onClick={cancelEdit}>Cancel</Button>
-              ) : null}
-            </div>
-          </form>
-        </Card>
-      </div>
-      <div className="space-y-3">
-        {!stores.length ? <Empty title="No store yet" text="Create one on the left. QR appears after the store exists." /> : null}
-        {stores.map((s) => {
-          const id = s.id || s._id;
-          return (
-            <Card key={id} className={editing === id ? "ring-1 ring-purple" : ""}>
-              <p className="font-semibold text-ink">{s.name}</p>
-              <p className="text-xs text-muted">{s.slug} · {s.status}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button variant="accent" onClick={async () => {
-                  upsertStore(s);
-                  try {
-                    const { data } = await getStoreQr(id);
-                    setQr(data.qr);
-                    toast.success("QR ready");
-                  } catch (e) {
-                    setError(getErrorMessage(e));
-                    toast.error(getErrorMessage(e));
-                  }
-                }}>Use store + QR</Button>
-                <Button variant="ghost" onClick={() => startEdit(s)}>Edit</Button>
-                <Button variant="ghost" onClick={() => remove(s)}>Delete</Button>
+      </Reveal>
+
+      <Alert>{error}</Alert>
+      {error.toLowerCase().includes("location limit") ? (
+        <Link to="/merchant/billing" className="inline-flex text-sm font-medium text-purple hover:underline">
+          Upgrade to add another location →
+        </Link>
+      ) : null}
+
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+        <Reveal>
+          <Card className="space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-lavender text-purple">
+                <Icon name={editing ? "list" : "store"} className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-purple">
+                  {editing ? "Edit store" : "New store"}
+                </p>
+                <p className="text-sm text-muted">Coordinates and geofence decide who can scan.</p>
               </div>
-            </Card>
-          );
-        })}
-        {qr ? (
-          <Card>
-            <p className="mb-2 text-sm text-purple">{qr.targetUrl}</p>
-            {qr.imageDataUrl ? <img src={qr.imageDataUrl} alt="Store QR" className="mx-auto w-56 rounded-2xl bg-white p-3" /> : null}
+            </div>
+
+            <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+              <Field label="Name" error={form.formState.errors.name?.message}>
+                <input className={inputClass} {...form.register("name")} />
+              </Field>
+              <Field label="Phone" error={form.formState.errors.phone?.message}>
+                <input className={inputClass} {...form.register("phone")} />
+              </Field>
+              <Field label="Address line">
+                <input className={inputClass} {...form.register("line1")} />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="City"><input className={inputClass} {...form.register("city")} /></Field>
+                <Field label="Pincode"><input className={inputClass} {...form.register("pincode")} /></Field>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Latitude" error={form.formState.errors.latitude?.message}>
+                  <input className={inputClass} {...form.register("latitude")} />
+                </Field>
+                <Field label="Longitude" error={form.formState.errors.longitude?.message}>
+                  <input className={inputClass} {...form.register("longitude")} />
+                </Field>
+              </div>
+              <Button type="button" variant="ghost" className="w-full" onClick={fillGps}>
+                <Icon name="phone" className="h-4 w-4 text-purple" />
+                Use current GPS
+              </Button>
+              <Field label="Geofence metres">
+                <input className={inputClass} type="number" {...form.register("geofenceRadius")} />
+              </Field>
+              {hasMapsKey() ? (
+                <MapPicker
+                  latitude={form.watch("latitude")}
+                  longitude={form.watch("longitude")}
+                  radius={form.watch("geofenceRadius")}
+                  onChange={({ latitude, longitude }) => {
+                    form.setValue("latitude", latitude, { shouldValidate: true });
+                    form.setValue("longitude", longitude, { shouldValidate: true });
+                  }}
+                  onPlace={(address) => {
+                    Object.entries(address).forEach(([key, value]) => {
+                      if (value) form.setValue(key, value);
+                    });
+                  }}
+                />
+              ) : null}
+              <div className="flex gap-2">
+                <Button className="flex-1">{editing ? "Save changes" : "Create store"}</Button>
+                {editing ? (
+                  <Button type="button" variant="ghost" onClick={cancelEdit}>Cancel</Button>
+                ) : null}
+              </div>
+            </form>
           </Card>
-        ) : null}
+        </Reveal>
+
+        <div className="space-y-4">
+          {!stores.length ? (
+            <Empty title="No store yet" text="Create one on the left. QR appears after the store exists." />
+          ) : null}
+
+          {stores.map((s, index) => {
+            const id = s.id || s._id;
+            return (
+              <Reveal key={id} delay={(index % 3) * 70}>
+                <Card
+                  className={`overflow-hidden p-0 ${editing === id ? "ring-2 ring-purple" : ""}`}
+                >
+                  <div className="relative flex items-center gap-3 bg-[linear-gradient(135deg,#3b0f8f,#6d28d9)] px-5 py-4">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white/15 text-white">
+                      <Icon name="store" className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-white">{s.name}</p>
+                      <p className="truncate text-xs text-white/70">{s.slug}</p>
+                    </div>
+                    {s.status ? (
+                      <span className="absolute right-4 top-4 rounded-full border border-white/30 bg-white/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white">
+                        {s.status}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 p-5">
+                    <Button variant="accent" size="sm" onClick={async () => {
+                      upsertStore(s);
+                      try {
+                        const { data } = await getStoreQr(id);
+                        setQr(data.qr);
+                        toast.success("QR ready");
+                      } catch (e) {
+                        setError(getErrorMessage(e));
+                        toast.error(getErrorMessage(e));
+                      }
+                    }}>
+                      <Icon name="grid" className="h-4 w-4" />
+                      Use store + QR
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => startEdit(s)}>
+                      <Icon name="list" className="h-4 w-4 text-purple" />
+                      Edit
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => remove(s)}>
+                      <Icon name="close" className="h-4 w-4 text-rose" />
+                      Delete
+                    </Button>
+                  </div>
+                </Card>
+              </Reveal>
+            );
+          })}
+
+          {qr ? (
+            <Reveal>
+              <Card halo className="space-y-3 text-center">
+                <Badge tone="purple">Store QR</Badge>
+                {qr.imageDataUrl ? (
+                  <img
+                    src={qr.imageDataUrl}
+                    alt="Store QR"
+                    className="mx-auto w-56 max-w-full rounded-3xl border border-line bg-white p-3 shadow-soft"
+                  />
+                ) : null}
+                <p className="break-all text-xs text-muted">{qr.targetUrl}</p>
+              </Card>
+            </Reveal>
+          ) : null}
+        </div>
       </div>
     </div>
   );

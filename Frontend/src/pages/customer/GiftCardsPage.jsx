@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { getMyGiftCards, recordVisit } from "../../api/giftCard";
 import { getErrorMessage } from "../../api/client";
+import { Icon } from "../../components/icons";
 import { Alert, Button, Card, Empty, PageTitle } from "../../components/ui";
 
 const cardValue = (card) => {
@@ -41,14 +42,20 @@ export default function GiftCardsPage() {
       <Alert>{error}</Alert>
 
       {progress ? (
-        <Card className="space-y-2">
-          <p className="text-sm text-muted">
-            You have visited on <span className="font-bold text-ink">{progress.totalVisits}</span> day
-            {progress.totalVisits === 1 ? "" : "s"}.
-          </p>
+        <Card className="q-fade-up space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-lavender text-purple">
+              <Icon name="spark" className="h-5 w-5" />
+            </span>
+            <p className="text-sm text-muted">
+              You have visited on <span className="font-bold text-ink">{progress.totalVisits}</span> day
+              {progress.totalVisits === 1 ? "" : "s"}.
+            </p>
+          </div>
+
           {progress.giftCard ? (
-            <p className="rounded-2xl bg-lavender px-3 py-2 text-sm font-semibold text-ink">
-              New gift card unlocked · {progress.giftCard.code}
+            <p className="rounded-2xl border border-purple/20 bg-lavender px-4 py-3 text-sm font-semibold text-ink">
+              New gift card unlocked · <span className="font-mono tracking-wide">{progress.giftCard.code}</span>
             </p>
           ) : (
             <p className="text-sm text-ink">
@@ -63,16 +70,39 @@ export default function GiftCardsPage() {
         <Empty title="No gift cards yet" text="Keep scanning this shop on different days to earn offers." />
       ) : null}
 
-      {cards.map((card) => (
-        <Card key={card.id} className="flex items-center justify-between">
-          <div>
-            <p className="font-semibold text-ink">{card.title}</p>
-            <p className="text-sm text-purple">{cardValue(card)}</p>
-            <p className="text-xs text-muted">{cardStatus(card)} · {card.source.toLowerCase()}</p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {cards.map((card) => (
+          <div
+            key={card.id}
+            className="q-fade-up relative isolate overflow-hidden rounded-4xl bg-[linear-gradient(135deg,#3b0f8f_0%,#6d28d9_55%,#8b5cf6_100%)] p-5 text-white shadow-lift"
+          >
+            <div className="q-dots pointer-events-none absolute inset-0 opacity-20" />
+            <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-lilac/30 blur-3xl" />
+
+            <div className="relative flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/70">Gift card</p>
+                <p className="mt-1 truncate text-lg font-semibold leading-snug">{card.title}</p>
+                <p className="mt-0.5 text-sm text-white/80">{cardValue(card)}</p>
+              </div>
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-white/25 bg-white/15 text-white backdrop-blur">
+                <Icon name="gift" className="h-5 w-5" />
+              </span>
+            </div>
+
+            <div className="relative mt-5 flex items-center justify-between gap-3 rounded-2xl border border-dashed border-white/40 bg-white/10 px-3.5 py-3 backdrop-blur">
+              <span className="truncate font-mono text-sm tracking-wider text-white">{card.code}</span>
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/75">
+                {cardStatus(card)}
+              </span>
+            </div>
+
+            <p className="relative mt-2.5 text-[11px] uppercase tracking-[0.14em] text-white/60">
+              {card.source.toLowerCase()}
+            </p>
           </div>
-          <span className="rounded-2xl bg-raised px-3 py-2 text-xs font-semibold text-ink">{card.code}</span>
-        </Card>
-      ))}
+        ))}
+      </div>
 
       <Button variant="ghost" className="w-full" onClick={() => window.location.reload()}>
         Check for a new card

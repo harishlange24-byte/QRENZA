@@ -2,14 +2,24 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getAdminAlerts } from "../../api/admin";
 import { getErrorMessage } from "../../api/client";
-import { Alert, Card, PageTitle } from "../../components/ui";
+import { Alert, Badge, Card, PageTitle } from "../../components/ui";
+import { Icon } from "../../components/icons";
+import { Reveal } from "../../components/motion";
 
 const money = (paise) => (paise === null || paise === undefined ? "-" : `₹${(paise / 100).toLocaleString("en-IN")}`);
 const date = (value) => (value ? new Date(value).toDateString() : "-");
 
+const TONE_WRAP = {
+  amber: "bg-amber/12 text-amber",
+  rose: "bg-rose/12 text-rose",
+  purple: "bg-lavender text-purple",
+  neutral: "bg-raised text-muted",
+  mint: "bg-mint/12 text-mint"
+};
+
 function MerchantLink({ id, name }) {
   if (!id) return <span className="text-muted">{name || "-"}</span>;
-  return <Link to={`/admin/merchants/${id}`} className="text-purple">{name || "-"}</Link>;
+  return <Link to={`/admin/merchants/${id}`} className="font-semibold text-ink hover:text-purple">{name || "-"}</Link>;
 }
 
 export default function AdminAlertsPage() {
@@ -28,149 +38,171 @@ export default function AdminAlertsPage() {
   useEffect(() => { load(); }, []);
 
   const sections = [
-    { key: "trialsEndingSoon", title: "Trials ending soon" },
-    { key: "pastDue", title: "Past due" },
-    { key: "expired", title: "Expired" },
-    { key: "paymentPending", title: "Payment pending" }
+    { key: "trialsEndingSoon", title: "Trials ending soon", tone: "amber", icon: "bell" },
+    { key: "pastDue", title: "Past due", tone: "rose", icon: "bell" },
+    { key: "expired", title: "Expired", tone: "neutral", icon: "bell" },
+    { key: "paymentPending", title: "Payment pending", tone: "amber", icon: "card" }
   ];
 
   return (
-    <div className="space-y-4">
-      <PageTitle title="Alerts" subtitle="Everything that needs a human decision." />
+    <div className="space-y-5">
+      <PageTitle eyebrow="Super admin" title="Alerts" subtitle="Everything that needs a human decision." />
       <Alert>{error}</Alert>
 
-      {sections.map(({ key, title }) => {
+      {sections.map(({ key, title, tone, icon }) => {
         const rows = data?.[key] || [];
         return (
-          <Card key={key}>
-            <p className="mb-3 text-sm font-semibold text-ink">{title}</p>
-            {rows.length ? (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-line text-xs uppercase tracking-wide text-purple">
-                      <th className="py-2">Merchant</th>
-                      <th className="py-2">Plan</th>
-                      <th className="py-2">Status</th>
-                      <th className="py-2">Due date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row) => (
-                      <tr key={row.id} className="border-b border-line last:border-0">
-                        <td className="py-2"><MerchantLink id={row.merchantId} name={row.merchant} /></td>
-                        <td className="py-2 text-muted">{row.planCode}</td>
-                        <td className="py-2 text-muted">{row.status}</td>
-                        <td className="py-2 text-muted">{date(row.dueDate)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <Reveal key={key}>
+            <Card className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-2xl ${TONE_WRAP[tone]}`}>
+                    <Icon name={icon} className="h-4 w-4" />
+                  </span>
+                  <p className="text-sm font-semibold text-ink">{title}</p>
+                </div>
+                <Badge tone={rows.length ? tone : "neutral"}>{rows.length}</Badge>
               </div>
-            ) : (
-              <p className="text-sm text-muted">Nothing here.</p>
-            )}
-          </Card>
+
+              {rows.length ? (
+                <div className="space-y-2">
+                  {rows.map((row) => (
+                    <div
+                      key={row.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-raised/60 px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <MerchantLink id={row.merchantId} name={row.merchant} />
+                        <p className="mt-0.5 text-xs text-muted">
+                          {row.planCode} · due {date(row.dueDate)}
+                        </p>
+                      </div>
+                      <Badge tone={tone}>{row.status}</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted">Nothing here.</p>
+              )}
+            </Card>
+          </Reveal>
         );
       })}
 
-      <Card>
-        <p className="mb-3 text-sm font-semibold text-ink">Pending refunds</p>
-        {(data?.pendingRefunds || []).length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-line text-xs uppercase tracking-wide text-purple">
-                  <th className="py-2">Merchant</th>
-                  <th className="py-2">Amount</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2">Requested</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.pendingRefunds || []).map((row) => (
-                  <tr key={row.id} className="border-b border-line last:border-0">
-                    <td className="py-2"><MerchantLink id={row.merchantId} name={row.merchant} /></td>
-                    <td className="py-2 text-ink">{money(row.amount)}</td>
-                    <td className="py-2 text-muted">{row.status}</td>
-                    <td className="py-2 text-muted">{date(row.dueDate)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <Reveal>
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-2xl ${TONE_WRAP.rose}`}>
+                <Icon name="card" className="h-4 w-4" />
+              </span>
+              <p className="text-sm font-semibold text-ink">Pending refunds</p>
+            </div>
+            <Badge tone={(data?.pendingRefunds || []).length ? "rose" : "neutral"}>
+              {(data?.pendingRefunds || []).length}
+            </Badge>
           </div>
-        ) : (
-          <p className="text-sm text-muted">Nothing here.</p>
-        )}
-      </Card>
 
-      <Card>
-        <p className="mb-3 text-sm font-semibold text-ink">Pending plan changes</p>
-        {(data?.pendingPlanChanges || []).length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-line text-xs uppercase tracking-wide text-purple">
-                  <th className="py-2">Merchant</th>
-                  <th className="py-2">Type</th>
-                  <th className="py-2">From</th>
-                  <th className="py-2">To</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2">Requested</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.pendingPlanChanges || []).map((row) => (
-                  <tr key={row.id} className="border-b border-line last:border-0">
-                    <td className="py-2"><MerchantLink id={row.merchantId} name={row.merchant} /></td>
-                    <td className="py-2 text-muted">{row.type}</td>
-                    <td className="py-2 text-muted">{row.from || "-"}</td>
-                    <td className="py-2 text-muted">{row.to || "-"}</td>
-                    <td className="py-2 text-muted">{row.status}</td>
-                    <td className="py-2 text-muted">{date(row.dueDate)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-sm text-muted">Nothing here.</p>
-        )}
-      </Card>
+          {(data?.pendingRefunds || []).length ? (
+            <div className="space-y-2">
+              {(data?.pendingRefunds || []).map((row) => (
+                <div
+                  key={row.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-raised/60 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <MerchantLink id={row.merchantId} name={row.merchant} />
+                    <p className="mt-0.5 text-xs text-muted">Requested {date(row.dueDate)}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-ink">{money(row.amount)}</span>
+                    <Badge tone="rose">{row.status}</Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted">Nothing here.</p>
+          )}
+        </Card>
+      </Reveal>
 
-      <Card>
-        <p className="mb-3 text-sm font-semibold text-ink">Open issues</p>
-        {(data?.openIssues || []).length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-line text-xs uppercase tracking-wide text-purple">
-                  <th className="py-2">Title</th>
-                  <th className="py-2">Store</th>
-                  <th className="py-2">Merchant</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2">Priority</th>
-                  <th className="py-2">Reported</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.openIssues || []).map((row) => (
-                  <tr key={row.id} className="border-b border-line last:border-0">
-                    <td className="py-2 text-ink">{row.title}</td>
-                    <td className="py-2 text-muted">{row.store || "-"}</td>
-                    <td className="py-2 text-muted">{row.merchant || "-"}</td>
-                    <td className="py-2 text-muted">{row.status}</td>
-                    <td className="py-2 text-muted">{row.priority}</td>
-                    <td className="py-2 text-muted">{date(row.dueDate)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <Reveal>
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-2xl ${TONE_WRAP.purple}`}>
+                <Icon name="list" className="h-4 w-4" />
+              </span>
+              <p className="text-sm font-semibold text-ink">Pending plan changes</p>
+            </div>
+            <Badge tone={(data?.pendingPlanChanges || []).length ? "purple" : "neutral"}>
+              {(data?.pendingPlanChanges || []).length}
+            </Badge>
           </div>
-        ) : (
-          <p className="text-sm text-muted">Nothing here.</p>
-        )}
-      </Card>
+
+          {(data?.pendingPlanChanges || []).length ? (
+            <div className="space-y-2">
+              {(data?.pendingPlanChanges || []).map((row) => (
+                <div
+                  key={row.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-raised/60 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <MerchantLink id={row.merchantId} name={row.merchant} />
+                    <p className="mt-0.5 text-xs text-muted">
+                      {row.type} · {row.from || "-"} → {row.to || "-"} · {date(row.dueDate)}
+                    </p>
+                  </div>
+                  <Badge tone="purple">{row.status}</Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted">Nothing here.</p>
+          )}
+        </Card>
+      </Reveal>
+
+      <Reveal>
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-2xl ${TONE_WRAP.amber}`}>
+                <Icon name="chat" className="h-4 w-4" />
+              </span>
+              <p className="text-sm font-semibold text-ink">Open issues</p>
+            </div>
+            <Badge tone={(data?.openIssues || []).length ? "amber" : "neutral"}>
+              {(data?.openIssues || []).length}
+            </Badge>
+          </div>
+
+          {(data?.openIssues || []).length ? (
+            <div className="space-y-2">
+              {(data?.openIssues || []).map((row) => (
+                <div
+                  key={row.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-raised/60 px-4 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-ink">{row.title}</p>
+                    <p className="mt-0.5 text-xs text-muted">
+                      {row.store || "-"} · {row.merchant || "-"} · {date(row.dueDate)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="neutral">{row.priority}</Badge>
+                    <Badge tone="amber">{row.status}</Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted">Nothing here.</p>
+          )}
+        </Card>
+      </Reveal>
     </div>
   );
 }
